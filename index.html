@@ -277,7 +277,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const monthLabel = (s) => { if (!s) return ''; const d = new Date(s + '-01'); return d.toLocaleString('en', { month: 'long', year: 'numeric' }); };
 
 // ── SETUP CHECK ───────────────────────────────────────────────────────────────
-const isConfigured = SUPABASE_URL !== 'https://ejxybzhrklqecbozftij.supabase.co';
+const isConfigured = true;
 
 // ── COMPONENTS ────────────────────────────────────────────────────────────────
 
