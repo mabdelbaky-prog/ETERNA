@@ -336,6 +336,265 @@ CREATE TABLE payroll_lines (
   );
 }
 
+// ── BULK UPLOAD/DOWNLOAD MODAL ────────────────────────────────────────────────
+const SAMPLE_CSV_HEADERS = ['full_name','national_id','department','job_title','hire_date','target_net','status'];
+const SAMPLE_ROWS = [
+  ['Ahmed Hassan','29901011234567','Operations','Operations Manager','2023-03-01','12000','active'],
+  ['Sara Mohamed','30005152345678','Finance','Senior Accountant','2024-06-15','9000','active'],
+  ['Khaled Ali','19801231345678','Sales','Sales Director','2022-01-10','18000','active'],
+];
+
+function downloadSampleCSV() {
+  const rows = [SAMPLE_CSV_HEADERS, ...SAMPLE_ROWS];
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'Eterna_Employees_Sample.csv';
+  a.click();
+}
+
+function downloadAllEmployees(employees) {
+  const rows = [SAMPLE_CSV_HEADERS, ...employees.map(e => [
+    e.full_name || '',
+    e.national_id || '',
+    e.department || '',
+    e.job_title || '',
+    e.hire_date || '',
+    e.target_net || '',
+    e.status || 'active',
+  ])];
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = `Eterna_Employees_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return { error: 'File is empty or has no data rows.' };
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,'').toLowerCase());
+  const required = ['full_name','hire_date','target_net'];
+  for (const r of required) {
+    if (!headers.includes(r)) return { error: `Missing required column: "${r}"` };
+  }
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    // Simple CSV split (handles quoted fields)
+    const vals = [];
+    let cur = '', inQ = false;
+    for (const ch of lines[i]) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    vals.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = (vals[idx] || '').replace(/^"|"$/g,'').trim(); });
+    rows.push({ _line: i + 1, ...obj });
+  }
+  return { headers, rows };
+}
+
+function validateRow(row) {
+  const errors = [];
+  if (!row.full_name) errors.push('full_name is required');
+  if (!row.hire_date || !/^\d{4}-\d{2}-\d{2}$/.test(row.hire_date)) errors.push('hire_date must be YYYY-MM-DD');
+  if (!row.target_net || isNaN(Number(row.target_net)) || Number(row.target_net) <= 0) errors.push('target_net must be a positive number');
+  if (row.status && !['active','inactive'].includes(row.status)) errors.push('status must be active or inactive');
+  return errors;
+}
+
+function BulkModal({ onClose, onDone, employees }) {
+  const [step, setStep] = useState('idle'); // idle | preview | uploading | done
+  const [parsed, setParsed] = useState(null);
+  const [results, setResults] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef(null);
+
+  const handleFile = (file) => {
+    if (!file || !file.name.endsWith('.csv')) { alert('Please upload a .csv file.'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = parseCSV(e.target.result);
+      if (result.error) { alert(result.error); return; }
+      setParsed(result);
+      setStep('preview');
+    };
+    reader.readAsText(file);
+  };
+
+  const upload = async () => {
+    setStep('uploading');
+    const valid = [], invalid = [];
+    for (const row of parsed.rows) {
+      const errors = validateRow(row);
+      if (errors.length) { invalid.push({ row, errors }); continue; }
+      valid.push({
+        full_name:  row.full_name,
+        national_id: row.national_id || null,
+        department: row.department || null,
+        job_title:  row.job_title || null,
+        hire_date:  row.hire_date,
+        target_net: Number(row.target_net),
+        status:     row.status || 'active',
+      });
+    }
+    let inserted = 0, failed = 0;
+    if (valid.length) {
+      const { error } = await sb.from('employees').insert(valid);
+      if (error) { failed = valid.length; }
+      else { inserted = valid.length; }
+    }
+    setResults({ inserted, skipped: invalid, failed });
+    setStep('done');
+    if (inserted > 0 && onDone) onDone();
+  };
+
+  const validRows  = parsed ? parsed.rows.filter(r => validateRow(r).length === 0) : [];
+  const invalidRows= parsed ? parsed.rows.filter(r => validateRow(r).length > 0)  : [];
+
+  return (
+    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ width: 680 }}>
+        <div className="modal-header">
+          <div className="modal-title">
+            {step === 'idle' && 'Bulk Upload / Download'}
+            {step === 'preview' && `Preview — ${parsed.rows.length} rows found`}
+            {step === 'uploading' && 'Uploading…'}
+            {step === 'done' && 'Upload Complete'}
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+
+          {/* ── IDLE ── */}
+          {step === 'idle' && (<>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:24 }}>
+              <div style={{ border:'1px solid var(--border)', borderRadius:8, padding:20, textAlign:'center' }}>
+                <div style={{ fontSize:28, marginBottom:8 }}>⬇</div>
+                <div style={{ fontWeight:600, marginBottom:6 }}>Download Sample CSV</div>
+                <div style={{ color:'var(--ink-light)', fontSize:12, marginBottom:14 }}>Get the template with correct column headers and 3 example rows</div>
+                <button className="btn btn-secondary" onClick={downloadSampleCSV}>Download Sample</button>
+              </div>
+              <div style={{ border:'1px solid var(--border)', borderRadius:8, padding:20, textAlign:'center' }}>
+                <div style={{ fontSize:28, marginBottom:8 }}>📤</div>
+                <div style={{ fontWeight:600, marginBottom:6 }}>Export All Employees</div>
+                <div style={{ color:'var(--ink-light)', fontSize:12, marginBottom:14 }}>Download all {employees.length} employees as CSV</div>
+                <button className="btn btn-secondary" onClick={() => downloadAllEmployees(employees)} disabled={employees.length === 0}>Export All ({employees.length})</button>
+              </div>
+            </div>
+
+            <div style={{ borderTop:'1px solid var(--border)', paddingTop:20 }}>
+              <div style={{ fontWeight:600, marginBottom:12 }}>Upload Employees CSV</div>
+              <div
+                style={{ border:`2px dashed ${dragOver ? 'var(--maroon)' : 'var(--border)'}`, borderRadius:8, padding:36, textAlign:'center', background: dragOver ? 'var(--maroon-faint)' : 'var(--bg)', cursor:'pointer', transition:'all .15s' }}
+                onClick={() => fileRef.current.click()}
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
+              >
+                <div style={{ fontSize:32, marginBottom:8 }}>📂</div>
+                <div style={{ fontWeight:500, marginBottom:4 }}>Drop CSV here or click to browse</div>
+                <div style={{ fontSize:12, color:'var(--ink-light)' }}>CSV files only · Use the sample template for correct format</div>
+                <input ref={fileRef} type="file" accept=".csv" style={{ display:'none' }} onChange={e => handleFile(e.target.files[0])} />
+              </div>
+              <div style={{ marginTop:12, fontSize:12, color:'var(--ink-light)' }}>
+                Required columns: <code>full_name</code>, <code>hire_date</code> (YYYY-MM-DD), <code>target_net</code><br/>
+                Optional: <code>national_id</code>, <code>department</code>, <code>job_title</code>, <code>status</code> (active/inactive)
+              </div>
+            </div>
+          </>)}
+
+          {/* ── PREVIEW ── */}
+          {step === 'preview' && (<>
+            <div style={{ display:'flex', gap:12, marginBottom:16 }}>
+              <div style={{ flex:1, background:'var(--success-bg)', border:'1px solid #B2DFCC', borderRadius:6, padding:'10px 14px', textAlign:'center' }}>
+                <div style={{ fontSize:22, fontWeight:700, color:'var(--success)' }}>{validRows.length}</div>
+                <div style={{ fontSize:12, color:'var(--success)' }}>Ready to insert</div>
+              </div>
+              <div style={{ flex:1, background:'var(--danger-bg)', border:'1px solid #F5C6C2', borderRadius:6, padding:'10px 14px', textAlign:'center' }}>
+                <div style={{ fontSize:22, fontWeight:700, color:'var(--danger)' }}>{invalidRows.length}</div>
+                <div style={{ fontSize:12, color:'var(--danger)' }}>Will be skipped</div>
+              </div>
+            </div>
+
+            <div style={{ maxHeight:320, overflowY:'auto', border:'1px solid var(--border)', borderRadius:6 }}>
+              <table style={{ fontSize:12 }}>
+                <thead>
+                  <tr>
+                    <th style={{ width:40 }}>#</th>
+                    <th>Name</th><th>Department</th><th>Hire Date</th><th>Target Net</th><th>Status</th><th>Issues</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.rows.map(row => {
+                    const errs = validateRow(row);
+                    const ok = errs.length === 0;
+                    return (
+                      <tr key={row._line} style={{ background: ok ? '' : '#FFF8F8' }}>
+                        <td style={{ color:'var(--ink-light)' }}>{row._line}</td>
+                        <td style={{ fontWeight:500 }}>{row.full_name || <span style={{color:'var(--danger)'}}>—</span>}</td>
+                        <td>{row.department || '—'}</td>
+                        <td style={{ color: /^\d{4}-\d{2}-\d{2}$/.test(row.hire_date) ? 'inherit' : 'var(--danger)' }}>{row.hire_date || '—'}</td>
+                        <td style={{ color: !isNaN(Number(row.target_net)) && row.target_net ? 'inherit' : 'var(--danger)' }}>{row.target_net || '—'}</td>
+                        <td>{row.status || 'active'}</td>
+                        <td style={{ color:'var(--danger)', fontSize:11 }}>{errs.join('; ') || <span style={{color:'var(--success)'}}>✓</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {invalidRows.length > 0 && (
+              <div className="alert alert-info" style={{ marginTop:12, marginBottom:0 }}>
+                {invalidRows.length} row(s) with errors will be skipped. Valid rows will still be inserted.
+              </div>
+            )}
+          </>)}
+
+          {/* ── UPLOADING ── */}
+          {step === 'uploading' && (
+            <div style={{ textAlign:'center', padding:'40px 0' }}>
+              <div style={{ fontSize:36, marginBottom:12 }}>⏳</div>
+              <div style={{ fontWeight:500 }}>Inserting employees…</div>
+            </div>
+          )}
+
+          {/* ── DONE ── */}
+          {step === 'done' && results && (
+            <div style={{ textAlign:'center', padding:'24px 0' }}>
+              <div style={{ fontSize:48, marginBottom:12 }}>{results.inserted > 0 ? '✅' : '⚠️'}</div>
+              <div style={{ fontSize:18, fontWeight:700, marginBottom:8 }}>
+                {results.inserted} employee{results.inserted !== 1 ? 's' : ''} added successfully
+              </div>
+              {results.failed > 0 && <div style={{ color:'var(--danger)', marginBottom:8 }}>{results.failed} rows failed to insert (database error)</div>}
+              {results.skipped.length > 0 && (
+                <div style={{ color:'var(--ink-light)', fontSize:13 }}>
+                  {results.skipped.length} row(s) skipped due to validation errors
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          {step === 'idle'     && <button className="btn btn-secondary" onClick={onClose}>Close</button>}
+          {step === 'preview'  && <>
+            <button className="btn btn-secondary" onClick={() => setStep('idle')}>← Back</button>
+            <button className="btn btn-primary" onClick={upload} disabled={validRows.length === 0}>
+              Insert {validRows.length} Employee{validRows.length !== 1 ? 's' : ''}
+            </button>
+          </>}
+          {step === 'done'     && <button className="btn btn-primary" onClick={onClose}>Done</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── FIELD (defined outside any component to preserve focus) ──────────────────
 function Field({ label, field, type='text', placeholder='', form, setForm }) {
   return (
@@ -404,6 +663,7 @@ function EmployeesTab() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({...BLANK_EMP});
+  const [showBulk, setShowBulk] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -471,6 +731,7 @@ function EmployeesTab() {
           <div className="card-title">Employee Directory</div>
           <div className="flex">
             <input placeholder="Search name or department…" value={search} onChange={e => setSearch(e.target.value)} style={{ width:220 }} />
+            <button className="btn btn-secondary" onClick={() => setShowBulk(true)}>⬆⬇ Bulk / Export</button>
             <button className="btn btn-primary" onClick={openAdd}>+ Add Employee</button>
           </div>
         </div>
@@ -509,6 +770,7 @@ function EmployeesTab() {
         </div>
       </div>
 
+      {showBulk && <BulkModal onClose={() => setShowBulk(false)} onDone={load} employees={employees} />}
       <EmpModal modal={modal} form={form} setForm={setForm} saving={saving} onClose={closeModal} onSave={save} />
     </>
   );
