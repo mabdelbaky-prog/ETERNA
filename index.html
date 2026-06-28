@@ -337,11 +337,11 @@ CREATE TABLE payroll_lines (
 }
 
 // ── BULK UPLOAD/DOWNLOAD MODAL ────────────────────────────────────────────────
-const SAMPLE_CSV_HEADERS = ['full_name','national_id','department','job_title','hire_date','target_net','status'];
+const SAMPLE_CSV_HEADERS = ['full_name','national_id','department','job_title','hire_date','target_net','status','bank_name','account_number'];
 const SAMPLE_ROWS = [
-  ['Ahmed Hassan','29901011234567','Operations','Operations Manager','2023-03-01','12000','active'],
-  ['Sara Mohamed','30005152345678','Finance','Senior Accountant','2024-06-15','9000','active'],
-  ['Khaled Ali','19801231345678','Sales','Sales Director','2022-01-10','18000','active'],
+  ['Ahmed Hassan','29901011234567','Operations','Operations Manager','2023-03-01','12000','active','Banque Misr','1234567890123456'],
+  ['Sara Mohamed','30005152345678','Finance','Senior Accountant','2024-06-15','9000','active','CIB','9876543210987654'],
+  ['Khaled Ali','19801231345678','Sales','Sales Director','2022-01-10','18000','active','NBE','1122334455667788'],
 ];
 
 function downloadSampleCSV() {
@@ -362,6 +362,8 @@ function downloadAllEmployees(employees) {
     e.hire_date || '',
     e.target_net || '',
     e.status || 'active',
+    e.bank_name || '',
+    e.account_number || '',
   ])];
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -439,6 +441,8 @@ function BulkModal({ onClose, onDone, employees }) {
         hire_date:  row.hire_date,
         target_net: Number(row.target_net),
         status:     row.status || 'active',
+        bank_name:  row.bank_name || null,
+        account_number: row.account_number || null,
       });
     }
     let inserted = 0, failed = 0;
@@ -626,7 +630,7 @@ function Modal({ title, onClose, children, footer }) {
 }
 
 // ── EMPLOYEES TAB ─────────────────────────────────────────────────────────────
-const BLANK_EMP = { full_name:'', national_id:'', department:'', job_title:'', hire_date:'', target_net:'', status:'active' };
+const BLANK_EMP = { full_name:'', national_id:'', department:'', job_title:'', hire_date:'', target_net:'', status:'active', bank_name:'', account_number:'' };
 
 // Split into two components so the modal form never re-renders due to table state changes
 function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
@@ -644,6 +648,8 @@ function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
         <Field label="Job Title" field="job_title" placeholder="Sales Manager" form={form} setForm={setForm} />
         <Field label="Hire Date *" field="hire_date" type="date" form={form} setForm={setForm} />
         <Field label="Target Net Salary (EGP/month) *" field="target_net" type="number" placeholder="15000" form={form} setForm={setForm} />
+        <Field label="Bank Name" field="bank_name" placeholder="Banque Misr" form={form} setForm={setForm} />
+        <Field label="Account Number" field="account_number" placeholder="1234567890123456" form={form} setForm={setForm} />
         <div className="form-group">
           <label>Status</label>
           <select value={form.status||'active'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
@@ -742,7 +748,7 @@ function EmployeesTab() {
             <thead>
               <tr>
                 <th>Name</th><th>National ID</th><th>Department</th><th>Job Title</th>
-                <th>Hire Date</th><th className="tbl-num">Target Net (EGP)</th><th>Status</th><th></th>
+                <th>Hire Date</th><th className="tbl-num">Target Net (EGP)</th><th>Bank</th><th>Account No.</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -754,6 +760,8 @@ function EmployeesTab() {
                   <td>{emp.job_title || '—'}</td>
                   <td>{emp.hire_date}</td>
                   <td className="tbl-num">{fmt(emp.target_net)}</td>
+                  <td>{emp.bank_name || '—'}</td>
+                  <td>{emp.account_number || '—'}</td>
                   <td><span className={`badge badge-${emp.status}`}>{emp.status}</span></td>
                   <td>
                     <div className="flex">
@@ -977,7 +985,7 @@ function RegisterView({ run, onBack, onViewPayslip }) {
     (async () => {
       setLoading(true);
       const { data } = await sb.from('payroll_lines')
-        .select('*, employees(full_name, department, job_title, hire_date, national_id)')
+        .select('*, employees(full_name, department, job_title, hire_date, national_id, bank_name, account_number)')
         .eq('run_id', run.id)
         .order('employees(full_name)');
       setLines(data || []);
@@ -1108,6 +1116,8 @@ function PayslipView({ data, onBack }) {
             <div className="meta-row"><span className="meta-key">Department</span><span className="meta-val">{emp.department || '—'}</span></div>
             <div className="meta-row"><span className="meta-key">Hire Date</span><span className="meta-val">{emp.hire_date}</span></div>
             <div className="meta-row"><span className="meta-key">Closing Date</span><span className="meta-val">{run.closing_date}</span></div>
+            {emp.bank_name && <div className="meta-row"><span className="meta-key">Bank</span><span className="meta-val">{emp.bank_name}</span></div>}
+            {emp.account_number && <div className="meta-row"><span className="meta-key">Account No.</span><span className="meta-val">{emp.account_number}</span></div>}
             {line.pro_rata_factor < 1 && (
               <div className="meta-row"><span className="meta-key">Pro-Rata Factor</span><span className="meta-val" style={{color:'var(--gold)'}}>{fmtPct(line.pro_rata_factor)} (partial month)</span></div>
             )}
