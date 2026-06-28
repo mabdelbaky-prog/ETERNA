@@ -336,6 +336,21 @@ CREATE TABLE payroll_lines (
   );
 }
 
+// ── FIELD (defined outside any component to preserve focus) ──────────────────
+function Field({ label, field, type='text', placeholder='', form, setForm }) {
+  return (
+    <div className="form-group">
+      <label>{label}</label>
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={form[field] || ''}
+        onChange={e => setForm(p => ({ ...p, [field]: e.target.value }))}
+      />
+    </div>
+  );
+}
+
 function Modal({ title, onClose, children, footer }) {
   return (
     <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -352,14 +367,43 @@ function Modal({ title, onClose, children, footer }) {
 }
 
 // ── EMPLOYEES TAB ─────────────────────────────────────────────────────────────
+const BLANK_EMP = { full_name:'', national_id:'', department:'', job_title:'', hire_date:'', target_net:'', status:'active' };
+
+// Split into two components so the modal form never re-renders due to table state changes
+function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
+  if (!modal) return null;
+  return (
+    <Modal title={modal === 'add' ? 'Add Employee' : 'Edit Employee'} onClose={onClose}
+      footer={<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={onSave} disabled={saving}>{saving ? <><span className="spinner"></span> Saving…</> : 'Save Employee'}</button>
+      </>}>
+      <div className="form-grid">
+        <Field label="Full Name *" field="full_name" placeholder="Ahmed Hassan" form={form} setForm={setForm} />
+        <Field label="National ID" field="national_id" placeholder="29901011234567" form={form} setForm={setForm} />
+        <Field label="Department" field="department" placeholder="Sales" form={form} setForm={setForm} />
+        <Field label="Job Title" field="job_title" placeholder="Sales Manager" form={form} setForm={setForm} />
+        <Field label="Hire Date *" field="hire_date" type="date" form={form} setForm={setForm} />
+        <Field label="Target Net Salary (EGP/month) *" field="target_net" type="number" placeholder="15000" form={form} setForm={setForm} />
+        <div className="form-group">
+          <label>Status</label>
+          <select value={form.status||'active'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function EmployeesTab() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null); // null | 'add' | emp obj
+  const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const blank = { full_name:'', national_id:'', department:'', job_title:'', hire_date:'', target_net:'', status:'active' };
-  const [form, setForm] = useState(blank);
+  const [form, setForm] = useState({...BLANK_EMP});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -370,11 +414,15 @@ function EmployeesTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  const openAdd = () => { setForm(blank); setModal('add'); };
-  const openEdit = (emp) => { setForm({ ...emp }); setModal(emp); };
+  const openAdd  = () => { setForm({...BLANK_EMP}); setModal('add'); };
+  const openEdit = (emp) => { setForm({...emp}); setModal(emp); };
+  const closeModal = () => setModal(null);
 
   const save = async () => {
-    if (!form.full_name || !form.hire_date || !form.target_net) return alert('Name, hire date, and target net are required.');
+    if (!form.full_name || !form.hire_date || !form.target_net) {
+      alert('Name, hire date, and target net are required.');
+      return;
+    }
     setSaving(true);
     if (modal === 'add') {
       await sb.from('employees').insert({ ...form, target_net: Number(form.target_net) });
@@ -396,13 +444,6 @@ function EmployeesTab() {
     (e.department||'').toLowerCase().includes(search.toLowerCase())
   );
   const active = employees.filter(e => e.status === 'active').length;
-
-  const Field = ({ label, field, type='text', placeholder='' }) => (
-    <div className="form-group">
-      <label>{label}</label>
-      <input type={type} placeholder={placeholder} value={form[field]||''} onChange={e => setForm(p => ({ ...p, [field]: e.target.value }))} />
-    </div>
-  );
 
   return (
     <>
@@ -468,29 +509,7 @@ function EmployeesTab() {
         </div>
       </div>
 
-      {modal && (
-        <Modal title={modal === 'add' ? 'Add Employee' : 'Edit Employee'} onClose={() => setModal(null)}
-          footer={<>
-            <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? <><span className="spinner"></span> Saving…</> : 'Save Employee'}</button>
-          </>}>
-          <div className="form-grid">
-            <Field label="Full Name *" field="full_name" placeholder="Ahmed Hassan" />
-            <Field label="National ID" field="national_id" placeholder="29901011234567" />
-            <Field label="Department" field="department" placeholder="Sales" />
-            <Field label="Job Title" field="job_title" placeholder="Sales Manager" />
-            <Field label="Hire Date *" field="hire_date" type="date" />
-            <Field label="Target Net Salary (EGP/month) *" field="target_net" type="number" placeholder="15000" />
-            <div className="form-group">
-              <label>Status</label>
-              <select value={form.status||'active'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <EmpModal modal={modal} form={form} setForm={setForm} saving={saving} onClose={closeModal} onSave={save} />
     </>
   );
 }
