@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Eterna Payroll</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --maroon: #8B1A2E;
+    --maroon-dark: #6B1222;
+    --maroon-light: #B8253F;
+    --maroon-faint: #F9F0F2;
+    --gold: #C9A84C;
+    --gold-light: #F5EDD6;
+    --ink: #1A1A1A;
+    --ink-mid: #4A4A4A;
+    --ink-light: #8A8A8A;
+    --border: #E2E2E2;
+    --surface: #FFFFFF;
+    --bg: #F7F6F4;
+    --success: #1A7A4A;
+    --success-bg: #EAF5EE;
+    --danger: #C0392B;
+    --danger-bg: #FDECEA;
+    --warning-bg: #FFF8E1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--ink); font-size: 14px; }
+
+  /* ── Layout ── */
+  .shell { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 220px; background: var(--maroon-dark); display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-logo { padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .sidebar-logo .co { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 0.04em; }
+  .sidebar-logo .sub { font-size: 11px; color: var(--gold); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2px; }
+  .nav { flex: 1; padding: 12px 0; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; color: rgba(255,255,255,0.65); cursor: pointer; font-size: 13.5px; transition: all .15s; border-left: 3px solid transparent; }
+  .nav-item:hover { color: #fff; background: rgba(255,255,255,0.06); }
+  .nav-item.active { color: #fff; background: rgba(255,255,255,0.1); border-left-color: var(--gold); }
+  .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+  .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: rgba(255,255,255,0.35); }
+
+  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; height: 56px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .topbar-title { font-size: 16px; font-weight: 600; color: var(--ink); }
+  .topbar-badge { background: var(--maroon-faint); color: var(--maroon); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .content { padding: 28px; flex: 1; }
+
+  /* ── Cards ── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 14px; font-weight: 600; }
+  .card-body { padding: 20px; }
+
+  /* ── Stat cards ── */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; }
+  .stat-label { font-size: 11px; color: var(--ink-light); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .stat-value { font-size: 24px; font-weight: 700; color: var(--ink); }
+  .stat-sub { font-size: 12px; color: var(--ink-light); margin-top: 2px; }
+  .stat.accent { border-left: 3px solid var(--maroon); }
+  .stat.gold { border-left: 3px solid var(--gold); }
+
+  /* ── Buttons ── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
+  .btn-primary { background: var(--maroon); color: #fff; }
+  .btn-primary:hover { background: var(--maroon-light); }
+  .btn-secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--bg); }
+  .btn-gold { background: var(--gold); color: #fff; }
+  .btn-gold:hover { background: #b8953e; }
+  .btn-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #f5c6c2; }
+  .btn-danger:hover { background: #fbd5d2; }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── Table ── */
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: var(--bg); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-mid); padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--ink); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  .tbl-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tbl-total td { font-weight: 700; background: var(--maroon-faint); border-top: 2px solid var(--maroon); }
+
+  /* ── Forms ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 12px; font-weight: 600; color: var(--ink-mid); }
+  input, select { padding: 8px 11px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--ink); background: var(--surface); outline: none; width: 100%; }
+  input:focus, select:focus { border-color: var(--maroon); box-shadow: 0 0 0 3px rgba(139,26,46,0.08); }
+
+  /* ── Badges ── */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-active { background: var(--success-bg); color: var(--success); }
+  .badge-inactive { background: var(--bg); color: var(--ink-light); }
+  .badge-draft { background: var(--warning-bg); color: #8a6d00; }
+  .badge-final { background: var(--success-bg); color: var(--success); }
+
+  /* ── Modal ── */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; display: flex; align-items: center; justify-content: center; }
+  .modal { background: var(--surface); border-radius: 10px; width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+  .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .modal-title { font-size: 15px; font-weight: 600; }
+  .modal-body { padding: 24px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+  .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--ink-light); line-height: 1; }
+
+  /* ── Payslip ── */
+  .payslip { background: #fff; max-width: 680px; margin: 0 auto; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .payslip-header { background: var(--maroon); color: #fff; padding: 28px 32px; }
+  .payslip-co { font-size: 22px; font-weight: 700; letter-spacing: .04em; }
+  .payslip-sub { font-size: 11px; color: rgba(255,255,255,0.6); letter-spacing: .12em; text-transform: uppercase; margin-top: 4px; }
+  .payslip-month { font-size: 13px; color: rgba(255,255,255,0.75); margin-top: 16px; }
+  .payslip-title { font-size: 18px; font-weight: 300; letter-spacing: .08em; text-transform: uppercase; }
+  .payslip-body { padding: 28px 32px; }
+  .payslip-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .meta-row { display: flex; justify-content: space-between; font-size: 13px; }
+  .meta-key { color: var(--ink-light); }
+  .meta-val { font-weight: 500; }
+  .payslip-section { margin-bottom: 20px; }
+  .payslip-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--maroon); margin-bottom: 8px; }
+  .payslip-line { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #F0F0F0; font-size: 13px; }
+  .payslip-line:last-child { border-bottom: none; }
+  .payslip-total { display: flex; justify-content: space-between; padding: 14px 16px; background: var(--maroon); color: #fff; border-radius: 6px; margin-top: 16px; }
+  .payslip-total-label { font-size: 13px; font-weight: 500; }
+  .payslip-total-value { font-size: 20px; font-weight: 700; }
+  .payslip-employer { background: var(--bg); border-radius: 6px; padding: 14px 16px; margin-top: 12px; }
+  .payslip-footer { padding: 16px 32px; background: var(--bg); border-top: 1px solid var(--border); font-size: 11px; color: var(--ink-light); display: flex; justify-content: space-between; }
+
+  /* ── Alert ── */
+  .alert { padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
+  .alert-info { background: #EBF4FF; color: #1E4E8C; border: 1px solid #C5DEFF; }
+  .alert-success { background: var(--success-bg); color: var(--success); border: 1px solid #B2DFCC; }
+  .alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #F5C6C2; }
+
+  /* ── Misc ── */
+  .empty { text-align: center; padding: 48px 20px; color: var(--ink-light); }
+  .empty-icon { font-size: 36px; margin-bottom: 10px; }
+  .empty-text { font-size: 14px; }
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+  .flex { display: flex; align-items: center; gap: 10px; }
+  .flex-between { display: flex; align-items: center; justify-content: space-between; }
+  .mb-16 { margin-bottom: 16px; }
+  .mb-24 { margin-bottom: 24px; }
+  .text-right { text-align: right; }
+  .text-muted { color: var(--ink-light); }
+  .text-success { color: var(--success); font-weight: 600; }
+  .text-maroon { color: var(--maroon); font-weight: 600; }
+  .pro-rata-badge { background: var(--gold-light); color: #7a5c00; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media print {
+    .shell, .sidebar, .topbar, .content > *:not(.payslip-wrap) { display: none !important; }
+    .payslip-wrap { display: block !important; }
+    .payslip { border: none; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { createClient } = supabase;
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://ejxybzhrklqecbozftij.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqeHliemhya2xxZWNib3pmdGlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NDg4NzUsImV4cCI6MjA5ODIyNDg3NX0.pYxfzQk9OInvfrwObue68dxKJibmjQlhCxNxg5JOROw';
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── PAYROLL ENGINE ────────────────────────────────────────────────────────────
+const EMP_SI_RATE   = 0.11;
+const EMP_SI_RATE_ER= 0.1875;
+const SI_MIN        = 2700;
+const SI_MAX        = 16700;
+const PERSONAL_EX   = 20000;
+const BRACKETS = [
+  { limit: 40000,  rate: 0.00 },
+  { limit: 55000,  rate: 0.10 },
+  { limit: 70000,  rate: 0.15 },
+  { limit: 200000, rate: 0.20 },
+  { limit: 400000, rate: 0.225},
+  { limit: Infinity,rate:0.275},
+];
+
+function calcTax(annualTaxable) {
+  if (annualTaxable <= 0) return 0;
+  let tax = 0, prev = 0;
+  for (const b of BRACKETS) {
+    if (annualTaxable <= prev) break;
+    const slice = Math.min(annualTaxable, b.limit) - prev;
+    tax += slice * b.rate;
+    prev = b.limit;
+    if (b.limit === Infinity) break;
+  }
+  return tax;
+}
+
+function annualNetFromGross(annualGross) {
+  const siBase   = Math.min(Math.max(annualGross / 12, SI_MIN), SI_MAX);
+  const empSiAnn = siBase * EMP_SI_RATE * 12;
+  const taxable  = Math.max(annualGross - empSiAnn - PERSONAL_EX, 0);
+  const tax      = calcTax(taxable);
+  return annualGross - empSiAnn - tax;
+}
+
+function grossUp(targetNetMonthly) {
+  const target = targetNetMonthly * 12;
+  let lo = target, hi = target * 3;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    annualNetFromGross(mid) < target ? lo = mid : hi = mid;
+  }
+  return (lo + hi) / 2 / 12;
+}
+
+function proRata(hireDate, closingDate) {
+  const closing  = new Date(closingDate);
+  const hire     = new Date(hireDate);
+  const monthStart = new Date(closing.getFullYear(), closing.getMonth(), 1);
+  if (hire <= monthStart) return 1;
+  const daysInMonth = new Date(closing.getFullYear(), closing.getMonth() + 1, 0).getDate();
+  const worked = Math.max(0, (closing - hire) / 86400000 + 1);
+  return Math.min(1, worked / daysInMonth);
+}
+
+function calcEmployee(emp, closingDate) {
+  const factor     = proRata(emp.hire_date, closingDate);
+  const grossFull  = grossUp(emp.target_net);
+  const siBase     = Math.min(Math.max(grossFull, SI_MIN), SI_MAX);
+  const empSi      = siBase * EMP_SI_RATE;
+  const annGross   = grossFull * 12;
+  const annEmpSi   = siBase * EMP_SI_RATE * 12;
+  const annTaxable = Math.max(annGross - annEmpSi - PERSONAL_EX, 0);
+  const monthlyTax = calcTax(annTaxable) / 12;
+  const totalDed   = empSi + monthlyTax;
+  const netFull    = grossFull - totalDed;
+  const erSi       = siBase * EMP_SI_RATE_ER;
+  return {
+    employee_id:     emp.id,
+    name:            emp.full_name,
+    department:      emp.department,
+    job_title:       emp.job_title,
+    hire_date:       emp.hire_date,
+    target_net:      emp.target_net,
+    pro_rata_factor: factor,
+    gross_full:      grossFull,
+    si_base:         siBase,
+    emp_si:          empSi,
+    annual_taxable:  annTaxable,
+    monthly_tax:     monthlyTax,
+    total_deductions:totalDed,
+    net_full:        netFull,
+    employer_si:     erSi,
+    // Dispensed (pro-rated)
+    dispensed_gross: grossFull * factor,
+    dispensed_emp_si:empSi * factor,
+    dispensed_tax:   monthlyTax * factor,
+    dispensed_deductions: totalDed * factor,
+    dispensed_net:   netFull * factor,
+    dispensed_er_si: erSi * factor,
+    total_employer_cost: (grossFull + erSi) * factor,
+  };
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const fmt = (n) => n == null ? '—' : Number(n).toLocaleString('en-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPct = (n) => (n * 100).toFixed(1) + '%';
+const today = () => new Date().toISOString().slice(0, 10);
+const monthLabel = (s) => { if (!s) return ''; const d = new Date(s + '-01'); return d.toLocaleString('en', { month: 'long', year: 'numeric' }); };
+
+// ── SETUP CHECK ───────────────────────────────────────────────────────────────
+const isConfigured = SUPABASE_URL !== 'https://ejxybzhrklqecbozftij.supabase.co';
+
+// ── COMPONENTS ────────────────────────────────────────────────────────────────
+
+function SetupScreen() {
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'var(--bg)' }}>
+      <div style={{ background:'#fff', borderRadius:10, padding:40, maxWidth:480, border:'1px solid var(--border)', textAlign:'center' }}>
+        <div style={{ fontSize:36, marginBottom:16 }}>🏗️</div>
+        <div style={{ fontSize:18, fontWeight:700, marginBottom:8 }}>Supabase Setup Required</div>
+        <div style={{ color:'var(--ink-light)', marginBottom:24, lineHeight:1.6 }}>
+          Open this file and set your <code>SUPABASE_URL</code> and <code>SUPABASE_KEY</code> at the top of the script, then run the SQL below to create the required tables.
+        </div>
+        <pre style={{ background:'var(--bg)', borderRadius:6, padding:16, textAlign:'left', fontSize:11, overflow:'auto', border:'1px solid var(--border)' }}>{`CREATE TABLE employees (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name text NOT NULL,
+  national_id text,
+  department text,
+  job_title text,
+  hire_date date NOT NULL,
+  target_net numeric NOT NULL,
+  status text DEFAULT 'active',
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE payroll_runs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  month text NOT NULL,
+  closing_date date NOT NULL,
+  status text DEFAULT 'draft',
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE payroll_lines (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id uuid REFERENCES payroll_runs(id) ON DELETE CASCADE,
+  employee_id uuid REFERENCES employees(id),
+  pro_rata_factor numeric,
+  gross_full numeric,
+  si_base numeric,
+  emp_si numeric,
+  annual_taxable numeric,
+  monthly_tax numeric,
+  total_deductions numeric,
+  net_full numeric,
+  employer_si numeric,
+  dispensed_gross numeric,
+  dispensed_emp_si numeric,
+  dispensed_tax numeric,
+  dispensed_deductions numeric,
+  dispensed_net numeric,
+  dispensed_er_si numeric,
+  total_employer_cost numeric
+);`}</pre>
+      </div>
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children, footer }) {
+  return (
+    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-header">
+          <div className="modal-title">{title}</div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-footer">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── EMPLOYEES TAB ─────────────────────────────────────────────────────────────
+function EmployeesTab() {
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null); // null | 'add' | emp obj
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const blank = { full_name:'', national_id:'', department:'', job_title:'', hire_date:'', target_net:'', status:'active' };
+  const [form, setForm] = useState(blank);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await sb.from('employees').select('*').order('full_name');
+    setEmployees(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openAdd = () => { setForm(blank); setModal('add'); };
+  const openEdit = (emp) => { setForm({ ...emp }); setModal(emp); };
+
+  const save = async () => {
+    if (!form.full_name || !form.hire_date || !form.target_net) return alert('Name, hire date, and target net are required.');
+    setSaving(true);
+    if (modal === 'add') {
+      await sb.from('employees').insert({ ...form, target_net: Number(form.target_net) });
+    } else {
+      await sb.from('employees').update({ ...form, target_net: Number(form.target_net) }).eq('id', modal.id);
+    }
+    setSaving(false);
+    setModal(null);
+    load();
+  };
+
+  const toggle = async (emp) => {
+    await sb.from('employees').update({ status: emp.status === 'active' ? 'inactive' : 'active' }).eq('id', emp.id);
+    load();
+  };
+
+  const filtered = employees.filter(e =>
+    e.full_name.toLowerCase().includes(search.toLowerCase()) ||
+    (e.department||'').toLowerCase().includes(search.toLowerCase())
+  );
+  const active = employees.filter(e => e.status === 'active').length;
+
+  const Field = ({ label, field, type='text', placeholder='' }) => (
+    <div className="form-group">
+      <label>{label}</label>
+      <input type={type} placeholder={placeholder} value={form[field]||''} onChange={e => setForm(p => ({ ...p, [field]: e.target.value }))} />
+    </div>
+  );
+
+  return (
+    <>
+      <div className="stats">
+        <div className="stat accent">
+          <div className="stat-label">Total Employees</div>
+          <div className="stat-value">{employees.length}</div>
+        </div>
+        <div className="stat gold">
+          <div className="stat-label">Active</div>
+          <div className="stat-value">{active}</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Inactive</div>
+          <div className="stat-value">{employees.length - active}</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Departments</div>
+          <div className="stat-value">{[...new Set(employees.map(e => e.department).filter(Boolean))].length}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">Employee Directory</div>
+          <div className="flex">
+            <input placeholder="Search name or department…" value={search} onChange={e => setSearch(e.target.value)} style={{ width:220 }} />
+            <button className="btn btn-primary" onClick={openAdd}>+ Add Employee</button>
+          </div>
+        </div>
+        <div className="tbl-wrap">
+          {loading ? <div className="empty"><div className="empty-text">Loading…</div></div> :
+          filtered.length === 0 ? <div className="empty"><div className="empty-icon">👤</div><div className="empty-text">No employees yet. Add one to get started.</div></div> :
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th><th>National ID</th><th>Department</th><th>Job Title</th>
+                <th>Hire Date</th><th className="tbl-num">Target Net (EGP)</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(emp => (
+                <tr key={emp.id}>
+                  <td style={{ fontWeight:500 }}>{emp.full_name}</td>
+                  <td className="text-muted">{emp.national_id || '—'}</td>
+                  <td>{emp.department || '—'}</td>
+                  <td>{emp.job_title || '—'}</td>
+                  <td>{emp.hire_date}</td>
+                  <td className="tbl-num">{fmt(emp.target_net)}</td>
+                  <td><span className={`badge badge-${emp.status}`}>{emp.status}</span></td>
+                  <td>
+                    <div className="flex">
+                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(emp)}>Edit</button>
+                      <button className="btn btn-sm" style={{ background:'none', color:'var(--ink-light)', border:'1px solid var(--border)' }} onClick={() => toggle(emp)}>
+                        {emp.status === 'active' ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>}
+        </div>
+      </div>
+
+      {modal && (
+        <Modal title={modal === 'add' ? 'Add Employee' : 'Edit Employee'} onClose={() => setModal(null)}
+          footer={<>
+            <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? <><span className="spinner"></span> Saving…</> : 'Save Employee'}</button>
+          </>}>
+          <div className="form-grid">
+            <Field label="Full Name *" field="full_name" placeholder="Ahmed Hassan" />
+            <Field label="National ID" field="national_id" placeholder="29901011234567" />
+            <Field label="Department" field="department" placeholder="Sales" />
+            <Field label="Job Title" field="job_title" placeholder="Sales Manager" />
+            <Field label="Hire Date *" field="hire_date" type="date" />
+            <Field label="Target Net Salary (EGP/month) *" field="target_net" type="number" placeholder="15000" />
+            <div className="form-group">
+              <label>Status</label>
+              <select value={form.status||'active'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+// ── RUN PAYROLL TAB ───────────────────────────────────────────────────────────
+function RunPayrollTab({ onRunCreated }) {
+  const [month, setMonth] = useState(today().slice(0,7));
+  const [closing, setClosing] = useState(today());
+  const [preview, setPreview] = useState(null);
+  const [calculating, setCalculating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const calculate = async () => {
+    setCalculating(true);
+    setMsg(null);
+    const { data: emps } = await sb.from('employees').select('*').eq('status', 'active');
+    if (!emps || emps.length === 0) { setMsg({ type:'danger', text:'No active employees found.' }); setCalculating(false); return; }
+    const lines = emps.map(e => calcEmployee(e, closing));
+    setPreview(lines);
+    setCalculating(false);
+  };
+
+  const finalize = async () => {
+    if (!preview) return;
+    setSaving(true);
+    const { data: run, error } = await sb.from('payroll_runs').insert({ month, closing_date: closing, status: 'draft' }).select().single();
+    if (error) { setMsg({ type:'danger', text:'Failed to create run: ' + error.message }); setSaving(false); return; }
+    const inserts = preview.map(l => ({ run_id: run.id, employee_id: l.employee_id, pro_rata_factor: l.pro_rata_factor, gross_full: l.gross_full, si_base: l.si_base, emp_si: l.emp_si, annual_taxable: l.annual_taxable, monthly_tax: l.monthly_tax, total_deductions: l.total_deductions, net_full: l.net_full, employer_si: l.employer_si, dispensed_gross: l.dispensed_gross, dispensed_emp_si: l.dispensed_emp_si, dispensed_tax: l.dispensed_tax, dispensed_deductions: l.dispensed_deductions, dispensed_net: l.dispensed_net, dispensed_er_si: l.dispensed_er_si, total_employer_cost: l.total_employer_cost }));
+    await sb.from('payroll_lines').insert(inserts);
+    await sb.from('payroll_runs').update({ status: 'finalized' }).eq('id', run.id);
+    setMsg({ type:'success', text:'Payroll run finalized and saved.' });
+    setPreview(null);
+    setSaving(false);
+    if (onRunCreated) onRunCreated();
+  };
+
+  const totals = preview ? {
+    dispensed_gross: preview.reduce((s,l) => s + l.dispensed_gross, 0),
+    dispensed_emp_si: preview.reduce((s,l) => s + l.dispensed_emp_si, 0),
+    dispensed_tax: preview.reduce((s,l) => s + l.dispensed_tax, 0),
+    dispensed_net: preview.reduce((s,l) => s + l.dispensed_net, 0),
+    dispensed_er_si: preview.reduce((s,l) => s + l.dispensed_er_si, 0),
+    total_employer_cost: preview.reduce((s,l) => s + l.total_employer_cost, 0),
+  } : null;
+
+  return (
+    <>
+      {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
+      <div className="card mb-24">
+        <div className="card-header"><div className="card-title">Payroll Run Parameters</div></div>
+        <div className="card-body">
+          <div className="form-grid-3">
+            <div className="form-group">
+              <label>Payroll Month</label>
+              <input type="month" value={month} onChange={e => setMonth(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Month Closing Date</label>
+              <input type="date" value={closing} onChange={e => setClosing(e.target.value)} />
+            </div>
+            <div className="form-group" style={{ justifyContent:'flex-end' }}>
+              <label>&nbsp;</label>
+              <button className="btn btn-primary" onClick={calculate} disabled={calculating}>
+                {calculating ? <><span className="spinner"></span> Calculating…</> : '⚡ Calculate Payroll'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {preview && (
+        <>
+          <div className="stats mb-24">
+            <div className="stat accent">
+              <div className="stat-label">Employees</div>
+              <div className="stat-value">{preview.length}</div>
+            </div>
+            <div className="stat gold">
+              <div className="stat-label">Total Dispensed Net</div>
+              <div className="stat-value" style={{ fontSize:18 }}>EGP {fmt(totals.dispensed_net)}</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">Total Gross</div>
+              <div className="stat-value" style={{ fontSize:18 }}>EGP {fmt(totals.dispensed_gross)}</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">Total Employer Cost</div>
+              <div className="stat-value" style={{ fontSize:18 }}>EGP {fmt(totals.total_employer_cost)}</div>
+            </div>
+          </div>
+
+          <div className="card mb-24">
+            <div className="card-header">
+              <div className="card-title">Payroll Preview — {monthLabel(month)}</div>
+              <div className="flex">
+                <div className="alert alert-info" style={{ margin:0, padding:'6px 12px' }}>Review before finalizing</div>
+                <button className="btn btn-gold" onClick={finalize} disabled={saving}>
+                  {saving ? <><span className="spinner"></span> Saving…</> : '✔ Finalize & Save'}
+                </button>
+              </div>
+            </div>
+            <div className="tbl-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Employee</th><th>Department</th><th>Pro-Rata</th>
+                    <th className="tbl-num">Full Gross</th>
+                    <th className="tbl-num">Emp SI</th>
+                    <th className="tbl-num">Tax</th>
+                    <th className="tbl-num">Disp. Gross</th>
+                    <th className="tbl-num">Disp. Deductions</th>
+                    <th className="tbl-num" style={{ color:'var(--success)' }}>Dispensed Net ★</th>
+                    <th className="tbl-num">Employer Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.map(l => (
+                    <tr key={l.employee_id}>
+                      <td style={{ fontWeight:500 }}>{l.name}</td>
+                      <td className="text-muted">{l.department || '—'}</td>
+                      <td>
+                        {l.pro_rata_factor < 1
+                          ? <span className="pro-rata-badge">{fmtPct(l.pro_rata_factor)}</span>
+                          : <span style={{ color:'var(--ink-light)', fontSize:12 }}>Full</span>}
+                      </td>
+                      <td className="tbl-num">{fmt(l.gross_full)}</td>
+                      <td className="tbl-num">{fmt(l.emp_si)}</td>
+                      <td className="tbl-num">{fmt(l.monthly_tax)}</td>
+                      <td className="tbl-num">{fmt(l.dispensed_gross)}</td>
+                      <td className="tbl-num">{fmt(l.dispensed_deductions)}</td>
+                      <td className="tbl-num text-success">{fmt(l.dispensed_net)}</td>
+                      <td className="tbl-num">{fmt(l.total_employer_cost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="tbl-total">
+                    <td colSpan={3}>TOTALS</td>
+                    <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.gross_full,0))}</td>
+                    <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.emp_si,0))}</td>
+                    <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.monthly_tax,0))}</td>
+                    <td className="tbl-num">{fmt(totals.dispensed_gross)}</td>
+                    <td className="tbl-num">{fmt(totals.dispensed_emp_si + totals.dispensed_tax)}</td>
+                    <td className="tbl-num text-success">{fmt(totals.dispensed_net)}</td>
+                    <td className="tbl-num">{fmt(totals.total_employer_cost)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ── HISTORY TAB ───────────────────────────────────────────────────────────────
+function HistoryTab({ onViewRun }) {
+  const [runs, setRuns] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const { data } = await sb.from('payroll_runs').select('*').order('closing_date', { ascending: false });
+      setRuns(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  return (
+    <div className="card">
+      <div className="card-header"><div className="card-title">Payroll History</div></div>
+      {loading ? <div className="empty"><div className="empty-text">Loading…</div></div> :
+      runs.length === 0 ? <div className="empty"><div className="empty-icon">📋</div><div className="empty-text">No payroll runs yet.</div></div> :
+      <div className="tbl-wrap">
+        <table>
+          <thead><tr><th>Month</th><th>Closing Date</th><th>Status</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            {runs.map(r => (
+              <tr key={r.id}>
+                <td style={{ fontWeight:500 }}>{monthLabel(r.month)}</td>
+                <td>{r.closing_date}</td>
+                <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
+                <td className="text-muted">{new Date(r.created_at).toLocaleDateString('en-EG')}</td>
+                <td><button className="btn btn-secondary btn-sm" onClick={() => onViewRun(r)}>View Register</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>}
+    </div>
+  );
+}
+
+// ── REGISTER VIEW ─────────────────────────────────────────────────────────────
+function RegisterView({ run, onBack, onViewPayslip }) {
+  const [lines, setLines] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const { data } = await sb.from('payroll_lines')
+        .select('*, employees(full_name, department, job_title, hire_date, national_id)')
+        .eq('run_id', run.id)
+        .order('employees(full_name)');
+      setLines(data || []);
+      setLoading(false);
+    })();
+  }, [run.id]);
+
+  const exportCSV = () => {
+    const headers = ['Name','Department','Pro-Rata','Full Gross','Emp SI','Monthly Tax','Total Ded.','Disp. Gross','Disp. Emp SI','Disp. Tax','Disp. Ded.','Dispensed Net','Disp. Employer SI','Total Employer Cost'];
+    const rows = lines.map(l => [
+      l.employees?.full_name, l.employees?.department, fmtPct(l.pro_rata_factor),
+      l.gross_full, l.emp_si, l.monthly_tax, l.total_deductions,
+      l.dispensed_gross, l.dispensed_emp_si, l.dispensed_tax, l.dispensed_deductions,
+      l.dispensed_net, l.dispensed_er_si, l.total_employer_cost
+    ]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = `Eterna_Payroll_${run.month}.csv`;
+    a.click();
+  };
+
+  const totals = lines.reduce((s, l) => ({
+    dispensed_gross: s.dispensed_gross + (l.dispensed_gross||0),
+    dispensed_net: s.dispensed_net + (l.dispensed_net||0),
+    total_employer_cost: s.total_employer_cost + (l.total_employer_cost||0),
+    dispensed_deductions: s.dispensed_deductions + (l.dispensed_deductions||0),
+  }), { dispensed_gross:0, dispensed_net:0, total_employer_cost:0, dispensed_deductions:0 });
+
+  return (
+    <>
+      <div className="flex mb-24">
+        <button className="btn btn-secondary" onClick={onBack}>← Back to History</button>
+        <div style={{ fontWeight:600, fontSize:16 }}>Register — {monthLabel(run.month)}</div>
+        <span className={`badge badge-${run.status}`}>{run.status}</span>
+        <button className="btn btn-secondary btn-sm" onClick={exportCSV}>⬇ Export CSV</button>
+      </div>
+
+      <div className="stats mb-24">
+        <div className="stat accent"><div className="stat-label">Employees</div><div className="stat-value">{lines.length}</div></div>
+        <div className="stat gold"><div className="stat-label">Dispensed Net</div><div className="stat-value" style={{fontSize:17}}>EGP {fmt(totals.dispensed_net)}</div></div>
+        <div className="stat"><div className="stat-label">Dispensed Gross</div><div className="stat-value" style={{fontSize:17}}>EGP {fmt(totals.dispensed_gross)}</div></div>
+        <div className="stat"><div className="stat-label">Total Employer Cost</div><div className="stat-value" style={{fontSize:17}}>EGP {fmt(totals.total_employer_cost)}</div></div>
+      </div>
+
+      <div className="card">
+        <div className="tbl-wrap">
+          {loading ? <div className="empty"><div className="empty-text">Loading…</div></div> :
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th><th>Dept</th><th>Pro-Rata</th>
+                <th className="tbl-num">Disp. Gross</th>
+                <th className="tbl-num">Emp SI</th>
+                <th className="tbl-num">Tax</th>
+                <th className="tbl-num">Disp. Ded.</th>
+                <th className="tbl-num" style={{color:'var(--success)'}}>Dispensed Net ★</th>
+                <th className="tbl-num">Employer Cost</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map(l => (
+                <tr key={l.id}>
+                  <td style={{fontWeight:500}}>{l.employees?.full_name}</td>
+                  <td className="text-muted">{l.employees?.department||'—'}</td>
+                  <td>{l.pro_rata_factor < 1 ? <span className="pro-rata-badge">{fmtPct(l.pro_rata_factor)}</span> : <span className="text-muted" style={{fontSize:12}}>Full</span>}</td>
+                  <td className="tbl-num">{fmt(l.dispensed_gross)}</td>
+                  <td className="tbl-num">{fmt(l.dispensed_emp_si)}</td>
+                  <td className="tbl-num">{fmt(l.dispensed_tax)}</td>
+                  <td className="tbl-num">{fmt(l.dispensed_deductions)}</td>
+                  <td className="tbl-num text-success">{fmt(l.dispensed_net)}</td>
+                  <td className="tbl-num">{fmt(l.total_employer_cost)}</td>
+                  <td><button className="btn btn-secondary btn-sm" onClick={() => onViewPayslip({ line: l, run })}>Payslip</button></td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="tbl-total">
+                <td colSpan={3}>TOTALS</td>
+                <td className="tbl-num">{fmt(totals.dispensed_gross)}</td>
+                <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_emp_si||0),0))}</td>
+                <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_tax||0),0))}</td>
+                <td className="tbl-num">{fmt(totals.dispensed_deductions)}</td>
+                <td className="tbl-num text-success">{fmt(totals.dispensed_net)}</td>
+                <td className="tbl-num">{fmt(totals.total_employer_cost)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── PAYSLIP VIEW ──────────────────────────────────────────────────────────────
+function PayslipView({ data, onBack }) {
+  const { line, run } = data;
+  const emp = line.employees || {};
+  const print = () => window.print();
+
+  return (
+    <div className="payslip-wrap">
+      <div className="flex mb-24" style={{justifyContent:'space-between'}}>
+        <button className="btn btn-secondary" onClick={onBack}>← Back</button>
+        <button className="btn btn-primary" onClick={print}>🖨 Print / Save PDF</button>
+      </div>
+      <div className="payslip">
+        <div className="payslip-header">
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+            <div>
+              <div className="payslip-co">ETERNA</div>
+              <div className="payslip-sub">Developments</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div className="payslip-title">Pay Slip</div>
+              <div className="payslip-month">{monthLabel(run.month)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="payslip-body">
+          <div className="payslip-meta">
+            <div className="meta-row"><span className="meta-key">Employee Name</span><span className="meta-val">{emp.full_name}</span></div>
+            <div className="meta-row"><span className="meta-key">National ID</span><span className="meta-val">{emp.national_id || '—'}</span></div>
+            <div className="meta-row"><span className="meta-key">Job Title</span><span className="meta-val">{emp.job_title || '—'}</span></div>
+            <div className="meta-row"><span className="meta-key">Department</span><span className="meta-val">{emp.department || '—'}</span></div>
+            <div className="meta-row"><span className="meta-key">Hire Date</span><span className="meta-val">{emp.hire_date}</span></div>
+            <div className="meta-row"><span className="meta-key">Closing Date</span><span className="meta-val">{run.closing_date}</span></div>
+            {line.pro_rata_factor < 1 && (
+              <div className="meta-row"><span className="meta-key">Pro-Rata Factor</span><span className="meta-val" style={{color:'var(--gold)'}}>{fmtPct(line.pro_rata_factor)} (partial month)</span></div>
+            )}
+          </div>
+
+          <div className="payslip-section">
+            <div className="payslip-section-title">Earnings</div>
+            <div className="payslip-line">
+              <span>Gross Salary {line.pro_rata_factor < 1 ? `(${fmtPct(line.pro_rata_factor)} of EGP ${fmt(line.gross_full)})` : ''}</span>
+              <span style={{fontWeight:600}}>EGP {fmt(line.dispensed_gross)}</span>
+            </div>
+          </div>
+
+          <div className="payslip-section">
+            <div className="payslip-section-title">Deductions</div>
+            <div className="payslip-line">
+              <span>Social Insurance (Employee 11%)</span>
+              <span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_emp_si)}</span>
+            </div>
+            <div className="payslip-line">
+              <span>Income Tax (Law 7/2024)</span>
+              <span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_tax)}</span>
+            </div>
+            <div className="payslip-line" style={{fontWeight:600}}>
+              <span>Total Deductions</span>
+              <span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_deductions)}</span>
+            </div>
+          </div>
+
+          <div className="payslip-total">
+            <div className="payslip-total-label">Net Salary to Dispense</div>
+            <div className="payslip-total-value">EGP {fmt(line.dispensed_net)}</div>
+          </div>
+
+          <div className="payslip-employer">
+            <div style={{fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--ink-light)', marginBottom:8}}>Employer Cost (Confidential)</div>
+            <div className="payslip-line" style={{borderBottom:'1px solid #E8E8E8'}}>
+              <span>Gross Salary</span><span>EGP {fmt(line.dispensed_gross)}</span>
+            </div>
+            <div className="payslip-line" style={{borderBottom:'1px solid #E8E8E8'}}>
+              <span>Employer SI (18.75%)</span><span>EGP {fmt(line.dispensed_er_si)}</span>
+            </div>
+            <div className="payslip-line" style={{fontWeight:700}}>
+              <span>Total Employer Cost</span><span>EGP {fmt(line.total_employer_cost)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="payslip-footer">
+          <span>Generated: {new Date().toLocaleDateString('en-EG')}</span>
+          <span>CONFIDENTIAL — Eterna Developments</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── APP ROOT ──────────────────────────────────────────────────────────────────
+function App() {
+  if (!isConfigured) return <SetupScreen />;
+
+  const [tab, setTab] = useState('employees');
+  const [historyView, setHistoryView] = useState(null); // null | run obj
+  const [payslipData, setPayslipData] = useState(null);
+
+  const nav = [
+    { id:'employees', icon:'👥', label:'Employees' },
+    { id:'run',       icon:'⚡', label:'Run Payroll' },
+    { id:'history',   icon:'📋', label:'History' },
+  ];
+
+  const tabLabel = { employees:'Employees', run:'Run Payroll', history: payslipData ? 'Payslip' : historyView ? 'Payroll Register' : 'History' };
+
+  const showPayslip = (data) => { setPayslipData(data); };
+  const backFromPayslip = () => setPayslipData(null);
+  const backFromRegister = () => { setHistoryView(null); setPayslipData(null); };
+
+  const renderContent = () => {
+    if (payslipData) return <PayslipView data={payslipData} onBack={backFromPayslip} />;
+    if (tab === 'employees') return <EmployeesTab />;
+    if (tab === 'run') return <RunPayrollTab onRunCreated={() => {}} />;
+    if (tab === 'history') {
+      if (historyView) return <RegisterView run={historyView} onBack={backFromRegister} onViewPayslip={showPayslip} />;
+      return <HistoryTab onViewRun={r => setHistoryView(r)} />;
+    }
+  };
+
+  return (
+    <div className="shell">
+      <div className="sidebar">
+        <div className="sidebar-logo">
+          <div className="co">ETERNA</div>
+          <div className="sub">Payroll System</div>
+        </div>
+        <div className="nav">
+          {nav.map(n => (
+            <div key={n.id} className={`nav-item ${tab === n.id ? 'active' : ''}`}
+              onClick={() => { setTab(n.id); setHistoryView(null); setPayslipData(null); }}>
+              <span className="nav-icon">{n.icon}</span>
+              <span>{n.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="sidebar-footer">Egypt Payroll 2026<br/>Law 7/2024 · NOSI Jan 2026</div>
+      </div>
+
+      <div className="main">
+        <div className="topbar">
+          <div className="topbar-title">{tabLabel[tab]}</div>
+          <div className="topbar-badge">Eterna Developments</div>
+        </div>
+        <div className="content">
+          {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
