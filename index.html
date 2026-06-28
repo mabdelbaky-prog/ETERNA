@@ -9,615 +9,302 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root {
-    --maroon: #8B1A2E;
-    --maroon-dark: #6B1222;
-    --maroon-light: #B8253F;
-    --maroon-faint: #F9F0F2;
-    --gold: #C9A84C;
-    --gold-light: #F5EDD6;
-    --ink: #1A1A1A;
-    --ink-mid: #4A4A4A;
-    --ink-light: #8A8A8A;
-    --border: #E2E2E2;
-    --surface: #FFFFFF;
-    --bg: #F7F6F4;
-    --success: #1A7A4A;
-    --success-bg: #EAF5EE;
-    --danger: #C0392B;
-    --danger-bg: #FDECEA;
-    --warning-bg: #FFF8E1;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--ink); font-size: 14px; }
+:root{--maroon:#8B1A2E;--maroon-dark:#6B1222;--maroon-light:#B8253F;--maroon-faint:#F9F0F2;--gold:#C9A84C;--gold-light:#F5EDD6;--ink:#1A1A1A;--ink-mid:#4A4A4A;--ink-light:#8A8A8A;--border:#E2E2E2;--surface:#FFFFFF;--bg:#F7F6F4;--success:#1A7A4A;--success-bg:#EAF5EE;--danger:#C0392B;--danger-bg:#FDECEA;--warning-bg:#FFF8E1;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;}
+.shell{display:flex;height:100vh;overflow:hidden;}
+.sidebar{width:220px;background:var(--maroon-dark);display:flex;flex-direction:column;flex-shrink:0;}
+.sidebar-logo{padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,0.1);}
+.sidebar-logo .co{font-size:18px;font-weight:700;color:#fff;letter-spacing:0.04em;}
+.sidebar-logo .sub{font-size:11px;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
+.nav{flex:1;padding:12px 0;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;color:rgba(255,255,255,0.65);cursor:pointer;font-size:13px;transition:all .15s;border-left:3px solid transparent;}
+.nav-item:hover{color:#fff;background:rgba(255,255,255,0.06);}
+.nav-item.active{color:#fff;background:rgba(255,255,255,0.1);border-left-color:var(--gold);}
+.nav-icon{font-size:15px;width:20px;text-align:center;}
+.sidebar-footer{padding:14px 20px;border-top:1px solid rgba(255,255,255,0.1);font-size:10px;color:rgba(255,255,255,0.3);}
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.topbar-title{font-size:16px;font-weight:600;}
+.topbar-badge{background:var(--maroon-faint);color:var(--maroon);font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;}
+.content{padding:28px;flex:1;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;}
+.card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:14px;font-weight:600;}
+.card-body{padding:20px;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;}
+.stat-label{font-size:11px;color:var(--ink-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.stat-value{font-size:22px;font-weight:700;}
+.stat.accent{border-left:3px solid var(--maroon);}
+.stat.gold{border-left:3px solid var(--gold);}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s;white-space:nowrap;}
+.btn-primary{background:var(--maroon);color:#fff;}.btn-primary:hover{background:var(--maroon-light);}
+.btn-secondary{background:var(--surface);color:var(--ink);border:1px solid var(--border);}.btn-secondary:hover{background:var(--bg);}
+.btn-gold{background:var(--gold);color:#fff;}.btn-gold:hover{background:#b8953e;}
+.btn-success{background:var(--success);color:#fff;}
+.btn-danger{background:var(--danger-bg);color:var(--danger);border:1px solid #f5c6c2;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:var(--bg);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-mid);padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--bg);}
+.tbl-num{text-align:right;font-variant-numeric:tabular-nums;}
+.tbl-total td{font-weight:700;background:var(--maroon-faint);border-top:2px solid var(--maroon);}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.form-grid-4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+.form-group.full{grid-column:1/-1;}
+label{font-size:12px;font-weight:600;color:var(--ink-mid);}
+input,select,textarea{padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--ink);background:var(--surface);outline:none;width:100%;}
+input:focus,select:focus,textarea:focus{border-color:var(--maroon);box-shadow:0 0 0 3px rgba(139,26,46,0.08);}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;}
+.badge-active{background:var(--success-bg);color:var(--success);}
+.badge-inactive{background:var(--bg);color:var(--ink-light);}
+.badge-draft{background:var(--warning-bg);color:#8a6d00;}
+.badge-finalized{background:var(--success-bg);color:var(--success);}
+.badge-active-loan{background:#EBF4FF;color:#1E4E8C;}
+.badge-settled{background:var(--bg);color:var(--ink-light);}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100;display:flex;align-items:center;justify-content:center;}
+.modal{background:var(--surface);border-radius:10px;width:580px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.2);}
+.modal-lg{width:760px;}
+.modal-header{padding:18px 24px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:15px;font-weight:600;}
+.modal-body{padding:22px;}
+.modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink-light);line-height:1;}
+.alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:14px;}
+.alert-info{background:#EBF4FF;color:#1E4E8C;border:1px solid #C5DEFF;}
+.alert-success{background:var(--success-bg);color:var(--success);border:1px solid #B2DFCC;}
+.alert-danger{background:var(--danger-bg);color:var(--danger);border:1px solid #F5C6C2;}
+.alert-warn{background:var(--warning-bg);color:#7a5c00;border:1px solid #f5e070;}
+.empty{text-align:center;padding:40px 20px;color:var(--ink-light);}
+.empty-icon{font-size:32px;margin-bottom:8px;}
+.empty-text{font-size:14px;}
+.flex{display:flex;align-items:center;gap:10px;}
+.flex-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.mb-16{margin-bottom:16px;}
+.mb-24{margin-bottom:24px;}
+.text-muted{color:var(--ink-light);}
+.text-success{color:var(--success);font-weight:600;}
+.text-maroon{color:var(--maroon);font-weight:600;}
+.text-danger{color:var(--danger);}
+.pro-rata-badge{background:var(--gold-light);color:#7a5c00;font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--maroon);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--maroon-faint);}
+.info-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.info-row:last-child{border-bottom:none;}
+.adj-panel{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px;margin-top:8px;}
+.adj-section{margin-bottom:14px;}
+.adj-section:last-child{margin-bottom:0;}
 
-  /* ── Layout ── */
-  .shell { display: flex; height: 100vh; overflow: hidden; }
-  .sidebar { width: 220px; background: var(--maroon-dark); display: flex; flex-direction: column; flex-shrink: 0; }
-  .sidebar-logo { padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-  .sidebar-logo .co { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 0.04em; }
-  .sidebar-logo .sub { font-size: 11px; color: var(--gold); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2px; }
-  .nav { flex: 1; padding: 12px 0; }
-  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; color: rgba(255,255,255,0.65); cursor: pointer; font-size: 13.5px; transition: all .15s; border-left: 3px solid transparent; }
-  .nav-item:hover { color: #fff; background: rgba(255,255,255,0.06); }
-  .nav-item.active { color: #fff; background: rgba(255,255,255,0.1); border-left-color: var(--gold); }
-  .nav-icon { font-size: 16px; width: 20px; text-align: center; }
-  .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: rgba(255,255,255,0.35); }
-
-  .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
-  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; height: 56px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-  .topbar-title { font-size: 16px; font-weight: 600; color: var(--ink); }
-  .topbar-badge { background: var(--maroon-faint); color: var(--maroon); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
-  .content { padding: 28px; flex: 1; }
-
-  /* ── Cards ── */
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
-  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-  .card-title { font-size: 14px; font-weight: 600; }
-  .card-body { padding: 20px; }
-
-  /* ── Stat cards ── */
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; }
-  .stat-label { font-size: 11px; color: var(--ink-light); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
-  .stat-value { font-size: 24px; font-weight: 700; color: var(--ink); }
-  .stat-sub { font-size: 12px; color: var(--ink-light); margin-top: 2px; }
-  .stat.accent { border-left: 3px solid var(--maroon); }
-  .stat.gold { border-left: 3px solid var(--gold); }
-
-  /* ── Buttons ── */
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
-  .btn-primary { background: var(--maroon); color: #fff; }
-  .btn-primary:hover { background: var(--maroon-light); }
-  .btn-secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
-  .btn-secondary:hover { background: var(--bg); }
-  .btn-gold { background: var(--gold); color: #fff; }
-  .btn-gold:hover { background: #b8953e; }
-  .btn-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #f5c6c2; }
-  .btn-danger:hover { background: #fbd5d2; }
-  .btn-sm { padding: 5px 11px; font-size: 12px; }
-  .btn:disabled { opacity: .45; cursor: not-allowed; }
-
-  /* ── Table ── */
-  .tbl-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; }
-  th { background: var(--bg); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-mid); padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
-  td { padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--ink); }
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: var(--bg); }
-  .tbl-num { text-align: right; font-variant-numeric: tabular-nums; }
-  .tbl-total td { font-weight: 700; background: var(--maroon-faint); border-top: 2px solid var(--maroon); }
-
-  /* ── Forms ── */
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-  .form-group { display: flex; flex-direction: column; gap: 5px; }
-  .form-group.full { grid-column: 1 / -1; }
-  label { font-size: 12px; font-weight: 600; color: var(--ink-mid); }
-  input, select { padding: 8px 11px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; color: var(--ink); background: var(--surface); outline: none; width: 100%; }
-  input:focus, select:focus { border-color: var(--maroon); box-shadow: 0 0 0 3px rgba(139,26,46,0.08); }
-
-  /* ── Badges ── */
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
-  .badge-active { background: var(--success-bg); color: var(--success); }
-  .badge-inactive { background: var(--bg); color: var(--ink-light); }
-  .badge-draft { background: var(--warning-bg); color: #8a6d00; }
-  .badge-final { background: var(--success-bg); color: var(--success); }
-
-  /* ── Modal ── */
-  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; display: flex; align-items: center; justify-content: center; }
-  .modal { background: var(--surface); border-radius: 10px; width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
-  .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-  .modal-title { font-size: 15px; font-weight: 600; }
-  .modal-body { padding: 24px; }
-  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
-  .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--ink-light); line-height: 1; }
-
-  /* ── Payslip ── */
-  .payslip { background: #fff; max-width: 680px; margin: 0 auto; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .payslip-header { background: var(--maroon); color: #fff; padding: 28px 32px; }
-  .payslip-co { font-size: 22px; font-weight: 700; letter-spacing: .04em; }
-  .payslip-sub { font-size: 11px; color: rgba(255,255,255,0.6); letter-spacing: .12em; text-transform: uppercase; margin-top: 4px; }
-  .payslip-month { font-size: 13px; color: rgba(255,255,255,0.75); margin-top: 16px; }
-  .payslip-title { font-size: 18px; font-weight: 300; letter-spacing: .08em; text-transform: uppercase; }
-  .payslip-body { padding: 28px 32px; }
-  .payslip-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-  .meta-row { display: flex; justify-content: space-between; font-size: 13px; }
-  .meta-key { color: var(--ink-light); }
-  .meta-val { font-weight: 500; }
-  .payslip-section { margin-bottom: 20px; }
-  .payslip-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--maroon); margin-bottom: 8px; }
-  .payslip-line { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #F0F0F0; font-size: 13px; }
-  .payslip-line:last-child { border-bottom: none; }
-  .payslip-total { display: flex; justify-content: space-between; padding: 14px 16px; background: var(--maroon); color: #fff; border-radius: 6px; margin-top: 16px; }
-  .payslip-total-label { font-size: 13px; font-weight: 500; }
-  .payslip-total-value { font-size: 20px; font-weight: 700; }
-  .payslip-employer { background: var(--bg); border-radius: 6px; padding: 14px 16px; margin-top: 12px; }
-  .payslip-footer { padding: 16px 32px; background: var(--bg); border-top: 1px solid var(--border); font-size: 11px; color: var(--ink-light); display: flex; justify-content: space-between; }
-
-  /* ── Alert ── */
-  .alert { padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
-  .alert-info { background: #EBF4FF; color: #1E4E8C; border: 1px solid #C5DEFF; }
-  .alert-success { background: var(--success-bg); color: var(--success); border: 1px solid #B2DFCC; }
-  .alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #F5C6C2; }
-
-  /* ── Misc ── */
-  .empty { text-align: center; padding: 48px 20px; color: var(--ink-light); }
-  .empty-icon { font-size: 36px; margin-bottom: 10px; }
-  .empty-text { font-size: 14px; }
-  .divider { height: 1px; background: var(--border); margin: 20px 0; }
-  .flex { display: flex; align-items: center; gap: 10px; }
-  .flex-between { display: flex; align-items: center; justify-content: space-between; }
-  .mb-16 { margin-bottom: 16px; }
-  .mb-24 { margin-bottom: 24px; }
-  .text-right { text-align: right; }
-  .text-muted { color: var(--ink-light); }
-  .text-success { color: var(--success); font-weight: 600; }
-  .text-maroon { color: var(--maroon); font-weight: 600; }
-  .pro-rata-badge { background: var(--gold-light); color: #7a5c00; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
-  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media print {
-    .shell, .sidebar, .topbar, .content > *:not(.payslip-wrap) { display: none !important; }
-    .payslip-wrap { display: block !important; }
-    .payslip { border: none; box-shadow: none; }
-  }
+/* payslip */
+.payslip{background:#fff;max-width:700px;margin:0 auto;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.payslip-header{background:var(--maroon);color:#fff;padding:24px 32px;}
+.payslip-co{font-size:22px;font-weight:700;letter-spacing:.04em;}
+.payslip-sub{font-size:10px;color:rgba(255,255,255,0.55);letter-spacing:.12em;text-transform:uppercase;margin-top:2px;}
+.payslip-body{padding:24px 32px;}
+.payslip-meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+.meta-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;}
+.meta-key{color:var(--ink-light);}
+.meta-val{font-weight:500;}
+.ps-section{margin-bottom:16px;}
+.ps-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--maroon);margin-bottom:6px;}
+.ps-line{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #F4F4F4;font-size:13px;}
+.ps-line:last-child{border-bottom:none;}
+.ps-total{display:flex;justify-content:space-between;padding:12px 16px;background:var(--maroon);color:#fff;border-radius:6px;margin-top:14px;}
+.ps-employer{background:var(--bg);border-radius:6px;padding:12px 16px;margin-top:10px;}
+.ps-leave{background:#EBF4FF;border-radius:6px;padding:10px 14px;margin-top:8px;font-size:12px;}
+.payslip-footer{padding:12px 32px;background:var(--bg);border-top:1px solid var(--border);font-size:10px;color:var(--ink-light);display:flex;justify-content:space-between;}
+@media print{.shell,.sidebar,.topbar,.content>*:not(.payslip-wrap){display:none!important;}.payslip-wrap{display:block!important;}.payslip{border:none;}}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 const { createClient } = supabase;
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
-// ── CONFIG ────────────────────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://ejxybzhrklqecbozftij.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqeHliemhya2xxZWNib3pmdGlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NDg4NzUsImV4cCI6MjA5ODIyNDg3NX0.pYxfzQk9OInvfrwObue68dxKJibmjQlhCxNxg5JOROw';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── PAYROLL ENGINE ────────────────────────────────────────────────────────────
-const EMP_SI_RATE   = 0.11;
-const EMP_SI_RATE_ER= 0.1875;
-const SI_MIN        = 2700;
-const SI_MAX        = 16700;
-const PERSONAL_EX   = 20000;
-const BRACKETS = [
-  { limit: 40000,  rate: 0.00 },
-  { limit: 55000,  rate: 0.10 },
-  { limit: 70000,  rate: 0.15 },
-  { limit: 200000, rate: 0.20 },
-  { limit: 400000, rate: 0.225},
-  { limit: Infinity,rate:0.275},
-];
+const EMP_SI = 0.11, ER_SI = 0.1875, SI_MIN = 2700, SI_MAX = 16700, PERS_EX = 20000;
+const BRACKETS = [{l:40000,r:0},{l:55000,r:.10},{l:70000,r:.15},{l:200000,r:.20},{l:400000,r:.225},{l:Infinity,r:.275}];
 
-function calcTax(annualTaxable) {
-  if (annualTaxable <= 0) return 0;
+function calcTax(t) {
+  if (t <= 0) return 0;
   let tax = 0, prev = 0;
   for (const b of BRACKETS) {
-    if (annualTaxable <= prev) break;
-    const slice = Math.min(annualTaxable, b.limit) - prev;
-    tax += slice * b.rate;
-    prev = b.limit;
-    if (b.limit === Infinity) break;
+    if (t <= prev) break;
+    tax += (Math.min(t, b.l) - prev) * b.r;
+    prev = b.l;
+    if (b.l === Infinity) break;
   }
   return tax;
 }
 
-function annualNetFromGross(annualGross) {
-  const siBase   = Math.min(Math.max(annualGross / 12, SI_MIN), SI_MAX);
-  const empSiAnn = siBase * EMP_SI_RATE * 12;
-  const taxable  = Math.max(annualGross - empSiAnn - PERSONAL_EX, 0);
-  const tax      = calcTax(taxable);
-  return annualGross - empSiAnn - tax;
+function netFromAnnualGross(g) {
+  const si = Math.min(Math.max(g/12, SI_MIN), SI_MAX) * EMP_SI * 12;
+  return g - si - calcTax(Math.max(g - si - PERS_EX, 0));
 }
 
-function grossUp(targetNetMonthly) {
-  const target = targetNetMonthly * 12;
-  let lo = target, hi = target * 3;
+function grossUp(targetNet) {
+  let lo = targetNet * 12, hi = targetNet * 36;
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
-    annualNetFromGross(mid) < target ? lo = mid : hi = mid;
+    netFromAnnualGross(mid) < targetNet * 12 ? lo = mid : hi = mid;
   }
   return (lo + hi) / 2 / 12;
 }
 
 function proRata(hireDate, closingDate) {
-  const closing  = new Date(closingDate);
-  const hire     = new Date(hireDate);
-  const monthStart = new Date(closing.getFullYear(), closing.getMonth(), 1);
-  if (hire <= monthStart) return 1;
-  const daysInMonth = new Date(closing.getFullYear(), closing.getMonth() + 1, 0).getDate();
-  const worked = Math.max(0, (closing - hire) / 86400000 + 1);
-  return Math.min(1, worked / daysInMonth);
+  const c = new Date(closingDate), h = new Date(hireDate);
+  const ms = new Date(c.getFullYear(), c.getMonth(), 1);
+  if (h <= ms) return 1;
+  const dim = new Date(c.getFullYear(), c.getMonth() + 1, 0).getDate();
+  return Math.min(1, Math.max(0, (c - h) / 86400000 + 1) / dim);
 }
 
-function calcEmployee(emp, closingDate) {
-  const factor     = proRata(emp.hire_date, closingDate);
-  const grossFull  = grossUp(emp.target_net);
-  const siBase     = Math.min(Math.max(grossFull, SI_MIN), SI_MAX);
-  const empSi      = siBase * EMP_SI_RATE;
-  const annGross   = grossFull * 12;
-  const annEmpSi   = siBase * EMP_SI_RATE * 12;
-  const annTaxable = Math.max(annGross - annEmpSi - PERSONAL_EX, 0);
-  const monthlyTax = calcTax(annTaxable) / 12;
-  const totalDed   = empSi + monthlyTax;
-  const netFull    = grossFull - totalDed;
-  const erSi       = siBase * EMP_SI_RATE_ER;
+function leaveEntitlement(hireDateStr, year) {
+  const hire = new Date(hireDateStr);
+  const jan1 = new Date(year, 0, 1);
+  const yearsService = (jan1 - hire) / (365.25 * 86400000);
+  if (yearsService >= 10) return 30;
+  if (yearsService >= 1)  return 21;
+  if (yearsService >= 0.5) return 15;
+  return 0;
+}
+
+function calcEmployee(emp, closingDate, adj = {}, fixedAllowances = [], leaveBal = null) {
+  const factor   = proRata(emp.hire_date, closingDate);
+  const gross    = grossUp(emp.target_net);
+  const siBase   = Math.min(Math.max(gross, SI_MIN), SI_MAX);
+  const empSi    = siBase * EMP_SI;
+  const erSiAmt  = siBase * ER_SI;
+  const annGross = gross * 12;
+  const annSi    = siBase * EMP_SI * 12;
+  const annTax   = calcTax(Math.max(annGross - annSi - PERS_EX, 0));
+  const mTax     = annTax / 12;
+  const dailyRate  = gross / 30;
+  const hourlyRate = gross / 26 / 8;
+
+  // OT
+  const otHours = Number(adj.ot_hours || 0);
+  const otRate  = adj.ot_rate_custom ? Number(adj.ot_rate_custom) : hourlyRate * 1.35;
+  const otValue = otHours * otRate;
+
+  // Lateness
+  const lateDays  = Number(adj.late_days || 0);
+  const lateHours = Number(adj.late_hours || 0);
+  const lateValue = lateDays * dailyRate + lateHours * hourlyRate;
+
+  // Leave
+  const leaveDays = Number(adj.leave_days || 0);
+  let leaveDeduction = 0, leaveFromBalance = 0, leaveFromSalary = 0;
+  if (leaveDays > 0) {
+    if (leaveBal && leaveBal.remaining_days >= leaveDays) {
+      leaveFromBalance = leaveDays;
+      leaveDeduction = 0;
+    } else {
+      const covered = leaveBal ? Math.min(leaveBal.remaining_days, leaveDays) : 0;
+      leaveFromBalance = covered;
+      leaveFromSalary  = leaveDays - covered;
+      leaveDeduction   = leaveFromSalary * dailyRate;
+    }
+  }
+
+  // Fixed allowances sum
+  const fixedAllow = fixedAllowances.reduce((s, a) => s + Number(a.amount), 0);
+  const varAllow   = Number(adj.variable_allowance || 0);
+  const incentive  = Number(adj.incentive || 0);
+  const penalty    = Number(adj.penalty_amount || 0);
+  const loanDed    = Number(adj.loan_deduction || 0);
+  const advance    = Number(adj.advance || 0);
+
+  const totalEarnings  = gross + fixedAllow + varAllow + incentive + otValue;
+  const totalDeductions= empSi + mTax + lateValue + leaveDeduction + penalty + loanDed + advance;
+  const netFull        = totalEarnings - totalDeductions;
+
   return {
-    employee_id:     emp.id,
-    name:            emp.full_name,
-    department:      emp.department,
-    job_title:       emp.job_title,
-    hire_date:       emp.hire_date,
-    target_net:      emp.target_net,
+    employee_id: emp.id, emp_code: emp.emp_code,
+    name: emp.full_name, department: emp.department, job_title: emp.job_title,
+    hire_date: emp.hire_date, target_net: emp.target_net,
     pro_rata_factor: factor,
-    gross_full:      grossFull,
-    si_base:         siBase,
-    emp_si:          empSi,
-    annual_taxable:  annTaxable,
-    monthly_tax:     monthlyTax,
-    total_deductions:totalDed,
-    net_full:        netFull,
-    employer_si:     erSi,
-    // Dispensed (pro-rated)
-    dispensed_gross: grossFull * factor,
-    dispensed_emp_si:empSi * factor,
-    dispensed_tax:   monthlyTax * factor,
-    dispensed_deductions: totalDed * factor,
-    dispensed_net:   netFull * factor,
-    dispensed_er_si: erSi * factor,
-    total_employer_cost: (grossFull + erSi) * factor,
+    gross_full: gross, si_base: siBase, emp_si: empSi, er_si: erSiAmt,
+    annual_taxable: Math.max(annGross - annSi - PERS_EX, 0),
+    monthly_tax: mTax,
+    daily_rate: dailyRate, hourly_rate: hourlyRate,
+    fixed_allowances: fixedAllow, variable_allowance: varAllow,
+    incentive, ot_hours: otHours, ot_rate: otRate, ot_value: otValue,
+    late_days: lateDays, late_hours: lateHours, late_value: lateValue,
+    leave_days: leaveDays, leave_from_balance: leaveFromBalance,
+    leave_from_salary: leaveFromSalary, leave_deduction: leaveDeduction,
+    leave_bal_before: leaveBal ? leaveBal.remaining_days : null,
+    leave_bal_after: leaveBal ? leaveBal.remaining_days - leaveFromBalance : null,
+    penalty, penalty_reason: adj.penalty_reason || '',
+    loan_deduction: loanDed, advance,
+    total_earnings: totalEarnings,
+    total_deductions: totalDeductions,
+    net_full: netFull,
+    // pro-rated dispensed
+    dispensed_gross:      gross * factor,
+    dispensed_allowances: (fixedAllow + varAllow + incentive) * factor,
+    dispensed_ot:         otValue * factor,
+    dispensed_emp_si:     empSi * factor,
+    dispensed_tax:        mTax * factor,
+    dispensed_late:       lateValue * factor,
+    dispensed_leave_ded:  leaveDeduction * factor,
+    dispensed_penalty:    penalty * factor,
+    dispensed_loan:       loanDed * factor,
+    dispensed_advance:    advance * factor,
+    dispensed_total_earn: totalEarnings * factor,
+    dispensed_total_ded:  totalDeductions * factor,
+    dispensed_net:        netFull * factor,
+    dispensed_er_si:      erSiAmt * factor,
+    total_employer_cost:  (gross + erSiAmt) * factor,
   };
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-const fmt = (n) => n == null ? '—' : Number(n).toLocaleString('en-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtPct = (n) => (n * 100).toFixed(1) + '%';
-const today = () => new Date().toISOString().slice(0, 10);
-const monthLabel = (s) => { if (!s) return ''; const d = new Date(s + '-01'); return d.toLocaleString('en', { month: 'long', year: 'numeric' }); };
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+const fmt    = n => n == null ? '—' : Number(n).toLocaleString('en-EG',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtPct = n => (n*100).toFixed(1)+'%';
+const today  = () => new Date().toISOString().slice(0,10);
+const mLabel = s => { if(!s) return ''; const d=new Date(s+'-01'); return d.toLocaleString('en',{month:'long',year:'numeric'}); };
 
-// ── SETUP CHECK ───────────────────────────────────────────────────────────────
-const isConfigured = true;
-
-// ── COMPONENTS ────────────────────────────────────────────────────────────────
-
-function SetupScreen() {
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'var(--bg)' }}>
-      <div style={{ background:'#fff', borderRadius:10, padding:40, maxWidth:480, border:'1px solid var(--border)', textAlign:'center' }}>
-        <div style={{ fontSize:36, marginBottom:16 }}>🏗️</div>
-        <div style={{ fontSize:18, fontWeight:700, marginBottom:8 }}>Supabase Setup Required</div>
-        <div style={{ color:'var(--ink-light)', marginBottom:24, lineHeight:1.6 }}>
-          Open this file and set your <code>SUPABASE_URL</code> and <code>SUPABASE_KEY</code> at the top of the script, then run the SQL below to create the required tables.
-        </div>
-        <pre style={{ background:'var(--bg)', borderRadius:6, padding:16, textAlign:'left', fontSize:11, overflow:'auto', border:'1px solid var(--border)' }}>{`CREATE TABLE employees (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  full_name text NOT NULL,
-  national_id text,
-  department text,
-  job_title text,
-  hire_date date NOT NULL,
-  target_net numeric NOT NULL,
-  status text DEFAULT 'active',
-  created_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE payroll_runs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  month text NOT NULL,
-  closing_date date NOT NULL,
-  status text DEFAULT 'draft',
-  created_at timestamptz DEFAULT now()
-);
-
-CREATE TABLE payroll_lines (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  run_id uuid REFERENCES payroll_runs(id) ON DELETE CASCADE,
-  employee_id uuid REFERENCES employees(id),
-  pro_rata_factor numeric,
-  gross_full numeric,
-  si_base numeric,
-  emp_si numeric,
-  annual_taxable numeric,
-  monthly_tax numeric,
-  total_deductions numeric,
-  net_full numeric,
-  employer_si numeric,
-  dispensed_gross numeric,
-  dispensed_emp_si numeric,
-  dispensed_tax numeric,
-  dispensed_deductions numeric,
-  dispensed_net numeric,
-  dispensed_er_si numeric,
-  total_employer_cost numeric
-);`}</pre>
-      </div>
-    </div>
-  );
+// Employee ID generator: EMP-001 format
+function nextEmpCode(employees) {
+  const nums = employees
+    .map(e => e.emp_code)
+    .filter(Boolean)
+    .map(c => parseInt(c.replace(/\D/g,''),10))
+    .filter(n => !isNaN(n));
+  const max = nums.length ? Math.max(...nums) : 0;
+  return 'EMP-' + String(max + 1).padStart(3, '0');
 }
 
-// ── BULK UPLOAD/DOWNLOAD MODAL ────────────────────────────────────────────────
-const SAMPLE_CSV_HEADERS = ['full_name','national_id','department','job_title','hire_date','target_net','status','bank_name','account_number'];
-const SAMPLE_ROWS = [
-  ['Ahmed Hassan','29901011234567','Operations','Operations Manager','2023-03-01','12000','active','Banque Misr','1234567890123456'],
-  ['Sara Mohamed','30005152345678','Finance','Senior Accountant','2024-06-15','9000','active','CIB','9876543210987654'],
-  ['Khaled Ali','19801231345678','Sales','Sales Director','2022-01-10','18000','active','NBE','1122334455667788'],
-];
-
-function downloadSampleCSV() {
-  const rows = [SAMPLE_CSV_HEADERS, ...SAMPLE_ROWS];
-  const csv = rows.map(r => r.join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  a.download = 'Eterna_Employees_Sample.csv';
-  a.click();
-}
-
-function downloadAllEmployees(employees) {
-  const rows = [SAMPLE_CSV_HEADERS, ...employees.map(e => [
-    e.full_name || '',
-    e.national_id || '',
-    e.department || '',
-    e.job_title || '',
-    e.hire_date || '',
-    e.target_net || '',
-    e.status || 'active',
-    e.bank_name || '',
-    e.account_number || '',
-  ])];
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  a.download = `Eterna_Employees_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-}
-
-function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return { error: 'File is empty or has no data rows.' };
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,'').toLowerCase());
-  const required = ['full_name','hire_date','target_net'];
-  for (const r of required) {
-    if (!headers.includes(r)) return { error: `Missing required column: "${r}"` };
-  }
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    // Simple CSV split (handles quoted fields)
-    const vals = [];
-    let cur = '', inQ = false;
-    for (const ch of lines[i]) {
-      if (ch === '"') { inQ = !inQ; }
-      else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
-      else cur += ch;
-    }
-    vals.push(cur.trim());
-    const obj = {};
-    headers.forEach((h, idx) => { obj[h] = (vals[idx] || '').replace(/^"|"$/g,'').trim(); });
-    rows.push({ _line: i + 1, ...obj });
-  }
-  return { headers, rows };
-}
-
-function validateRow(row) {
-  const errors = [];
-  if (!row.full_name) errors.push('full_name is required');
-  if (!row.hire_date || !/^\d{4}-\d{2}-\d{2}$/.test(row.hire_date)) errors.push('hire_date must be YYYY-MM-DD');
-  if (!row.target_net || isNaN(Number(row.target_net)) || Number(row.target_net) <= 0) errors.push('target_net must be a positive number');
-  if (row.status && !['active','inactive'].includes(row.status)) errors.push('status must be active or inactive');
-  return errors;
-}
-
-function BulkModal({ onClose, onDone, employees }) {
-  const [step, setStep] = useState('idle'); // idle | preview | uploading | done
-  const [parsed, setParsed] = useState(null);
-  const [results, setResults] = useState(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileRef = useRef(null);
-
-  const handleFile = (file) => {
-    if (!file || !file.name.endsWith('.csv')) { alert('Please upload a .csv file.'); return; }
-    const reader = new FileReader();
-    reader.onload = e => {
-      const result = parseCSV(e.target.result);
-      if (result.error) { alert(result.error); return; }
-      setParsed(result);
-      setStep('preview');
-    };
-    reader.readAsText(file);
-  };
-
-  const upload = async () => {
-    setStep('uploading');
-    const valid = [], invalid = [];
-    for (const row of parsed.rows) {
-      const errors = validateRow(row);
-      if (errors.length) { invalid.push({ row, errors }); continue; }
-      valid.push({
-        full_name:  row.full_name,
-        national_id: row.national_id || null,
-        department: row.department || null,
-        job_title:  row.job_title || null,
-        hire_date:  row.hire_date,
-        target_net: Number(row.target_net),
-        status:     row.status || 'active',
-        bank_name:  row.bank_name || null,
-        account_number: row.account_number || null,
-      });
-    }
-    let inserted = 0, failed = 0;
-    if (valid.length) {
-      const { error } = await sb.from('employees').insert(valid);
-      if (error) { failed = valid.length; }
-      else { inserted = valid.length; }
-    }
-    setResults({ inserted, skipped: invalid, failed });
-    setStep('done');
-    if (inserted > 0 && onDone) onDone();
-  };
-
-  const validRows  = parsed ? parsed.rows.filter(r => validateRow(r).length === 0) : [];
-  const invalidRows= parsed ? parsed.rows.filter(r => validateRow(r).length > 0)  : [];
-
-  return (
-    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ width: 680 }}>
-        <div className="modal-header">
-          <div className="modal-title">
-            {step === 'idle' && 'Bulk Upload / Download'}
-            {step === 'preview' && `Preview — ${parsed.rows.length} rows found`}
-            {step === 'uploading' && 'Uploading…'}
-            {step === 'done' && 'Upload Complete'}
-          </div>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-
-          {/* ── IDLE ── */}
-          {step === 'idle' && (<>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:24 }}>
-              <div style={{ border:'1px solid var(--border)', borderRadius:8, padding:20, textAlign:'center' }}>
-                <div style={{ fontSize:28, marginBottom:8 }}>⬇</div>
-                <div style={{ fontWeight:600, marginBottom:6 }}>Download Sample CSV</div>
-                <div style={{ color:'var(--ink-light)', fontSize:12, marginBottom:14 }}>Get the template with correct column headers and 3 example rows</div>
-                <button className="btn btn-secondary" onClick={downloadSampleCSV}>Download Sample</button>
-              </div>
-              <div style={{ border:'1px solid var(--border)', borderRadius:8, padding:20, textAlign:'center' }}>
-                <div style={{ fontSize:28, marginBottom:8 }}>📤</div>
-                <div style={{ fontWeight:600, marginBottom:6 }}>Export All Employees</div>
-                <div style={{ color:'var(--ink-light)', fontSize:12, marginBottom:14 }}>Download all {employees.length} employees as CSV</div>
-                <button className="btn btn-secondary" onClick={() => downloadAllEmployees(employees)} disabled={employees.length === 0}>Export All ({employees.length})</button>
-              </div>
-            </div>
-
-            <div style={{ borderTop:'1px solid var(--border)', paddingTop:20 }}>
-              <div style={{ fontWeight:600, marginBottom:12 }}>Upload Employees CSV</div>
-              <div
-                style={{ border:`2px dashed ${dragOver ? 'var(--maroon)' : 'var(--border)'}`, borderRadius:8, padding:36, textAlign:'center', background: dragOver ? 'var(--maroon-faint)' : 'var(--bg)', cursor:'pointer', transition:'all .15s' }}
-                onClick={() => fileRef.current.click()}
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }}
-              >
-                <div style={{ fontSize:32, marginBottom:8 }}>📂</div>
-                <div style={{ fontWeight:500, marginBottom:4 }}>Drop CSV here or click to browse</div>
-                <div style={{ fontSize:12, color:'var(--ink-light)' }}>CSV files only · Use the sample template for correct format</div>
-                <input ref={fileRef} type="file" accept=".csv" style={{ display:'none' }} onChange={e => handleFile(e.target.files[0])} />
-              </div>
-              <div style={{ marginTop:12, fontSize:12, color:'var(--ink-light)' }}>
-                Required columns: <code>full_name</code>, <code>hire_date</code> (YYYY-MM-DD), <code>target_net</code><br/>
-                Optional: <code>national_id</code>, <code>department</code>, <code>job_title</code>, <code>status</code> (active/inactive)
-              </div>
-            </div>
-          </>)}
-
-          {/* ── PREVIEW ── */}
-          {step === 'preview' && (<>
-            <div style={{ display:'flex', gap:12, marginBottom:16 }}>
-              <div style={{ flex:1, background:'var(--success-bg)', border:'1px solid #B2DFCC', borderRadius:6, padding:'10px 14px', textAlign:'center' }}>
-                <div style={{ fontSize:22, fontWeight:700, color:'var(--success)' }}>{validRows.length}</div>
-                <div style={{ fontSize:12, color:'var(--success)' }}>Ready to insert</div>
-              </div>
-              <div style={{ flex:1, background:'var(--danger-bg)', border:'1px solid #F5C6C2', borderRadius:6, padding:'10px 14px', textAlign:'center' }}>
-                <div style={{ fontSize:22, fontWeight:700, color:'var(--danger)' }}>{invalidRows.length}</div>
-                <div style={{ fontSize:12, color:'var(--danger)' }}>Will be skipped</div>
-              </div>
-            </div>
-
-            <div style={{ maxHeight:320, overflowY:'auto', border:'1px solid var(--border)', borderRadius:6 }}>
-              <table style={{ fontSize:12 }}>
-                <thead>
-                  <tr>
-                    <th style={{ width:40 }}>#</th>
-                    <th>Name</th><th>Department</th><th>Hire Date</th><th>Target Net</th><th>Status</th><th>Issues</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {parsed.rows.map(row => {
-                    const errs = validateRow(row);
-                    const ok = errs.length === 0;
-                    return (
-                      <tr key={row._line} style={{ background: ok ? '' : '#FFF8F8' }}>
-                        <td style={{ color:'var(--ink-light)' }}>{row._line}</td>
-                        <td style={{ fontWeight:500 }}>{row.full_name || <span style={{color:'var(--danger)'}}>—</span>}</td>
-                        <td>{row.department || '—'}</td>
-                        <td style={{ color: /^\d{4}-\d{2}-\d{2}$/.test(row.hire_date) ? 'inherit' : 'var(--danger)' }}>{row.hire_date || '—'}</td>
-                        <td style={{ color: !isNaN(Number(row.target_net)) && row.target_net ? 'inherit' : 'var(--danger)' }}>{row.target_net || '—'}</td>
-                        <td>{row.status || 'active'}</td>
-                        <td style={{ color:'var(--danger)', fontSize:11 }}>{errs.join('; ') || <span style={{color:'var(--success)'}}>✓</span>}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {invalidRows.length > 0 && (
-              <div className="alert alert-info" style={{ marginTop:12, marginBottom:0 }}>
-                {invalidRows.length} row(s) with errors will be skipped. Valid rows will still be inserted.
-              </div>
-            )}
-          </>)}
-
-          {/* ── UPLOADING ── */}
-          {step === 'uploading' && (
-            <div style={{ textAlign:'center', padding:'40px 0' }}>
-              <div style={{ fontSize:36, marginBottom:12 }}>⏳</div>
-              <div style={{ fontWeight:500 }}>Inserting employees…</div>
-            </div>
-          )}
-
-          {/* ── DONE ── */}
-          {step === 'done' && results && (
-            <div style={{ textAlign:'center', padding:'24px 0' }}>
-              <div style={{ fontSize:48, marginBottom:12 }}>{results.inserted > 0 ? '✅' : '⚠️'}</div>
-              <div style={{ fontSize:18, fontWeight:700, marginBottom:8 }}>
-                {results.inserted} employee{results.inserted !== 1 ? 's' : ''} added successfully
-              </div>
-              {results.failed > 0 && <div style={{ color:'var(--danger)', marginBottom:8 }}>{results.failed} rows failed to insert (database error)</div>}
-              {results.skipped.length > 0 && (
-                <div style={{ color:'var(--ink-light)', fontSize:13 }}>
-                  {results.skipped.length} row(s) skipped due to validation errors
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="modal-footer">
-          {step === 'idle'     && <button className="btn btn-secondary" onClick={onClose}>Close</button>}
-          {step === 'preview'  && <>
-            <button className="btn btn-secondary" onClick={() => setStep('idle')}>← Back</button>
-            <button className="btn btn-primary" onClick={upload} disabled={validRows.length === 0}>
-              Insert {validRows.length} Employee{validRows.length !== 1 ? 's' : ''}
-            </button>
-          </>}
-          {step === 'done'     && <button className="btn btn-primary" onClick={onClose}>Done</button>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── FIELD (defined outside any component to preserve focus) ──────────────────
-function Field({ label, field, type='text', placeholder='', form, setForm }) {
+// ── SHARED COMPONENTS ─────────────────────────────────────────────────────────
+function Field({ label, field, type='text', placeholder='', form, setForm, readOnly=false }) {
   return (
     <div className="form-group">
       <label>{label}</label>
-      <input
-        type={type}
-        placeholder={placeholder}
-        value={form[field] || ''}
-        onChange={e => setForm(p => ({ ...p, [field]: e.target.value }))}
-      />
+      <input type={type} placeholder={placeholder} value={form[field]||''} readOnly={readOnly}
+        style={readOnly?{background:'var(--bg)',color:'var(--ink-light)'}:{}}
+        onChange={e => !readOnly && setForm(p => ({...p,[field]:e.target.value}))} />
     </div>
   );
 }
 
-function Modal({ title, onClose, children, footer }) {
+function Modal({ title, onClose, children, footer, lg }) {
   return (
-    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
+    <div className="modal-bg" onClick={e => e.target===e.currentTarget&&onClose()}>
+      <div className={`modal${lg?' modal-lg':''}`}>
         <div className="modal-header">
           <div className="modal-title">{title}</div>
           <button className="modal-close" onClick={onClose}>×</button>
@@ -629,30 +316,78 @@ function Modal({ title, onClose, children, footer }) {
   );
 }
 
-// ── EMPLOYEES TAB ─────────────────────────────────────────────────────────────
-const BLANK_EMP = { full_name:'', national_id:'', department:'', job_title:'', hire_date:'', target_net:'', status:'active', bank_name:'', account_number:'' };
+// ── BULK CSV HELPERS ──────────────────────────────────────────────────────────
+const CSV_HEADERS = ['emp_code','full_name','national_id','department','job_title','hire_date','target_net','status','bank_name','account_number'];
+const SAMPLE_ROWS = [
+  ['EMP-001','Ahmed Hassan','29901011234567','Operations','Operations Manager','2023-03-01','12000','active','Banque Misr','1234567890123456'],
+  ['EMP-002','Sara Mohamed','30005152345678','Finance','Senior Accountant','2024-06-15','9000','active','CIB','9876543210987654'],
+  ['EMP-003','Khaled Ali','19801231345678','Sales','Sales Director','2022-01-10','18000','active','NBE','1122334455667788'],
+];
 
-// Split into two components so the modal form never re-renders due to table state changes
+function downloadCSV(headers, rows, filename) {
+  const csv = [headers, ...rows].map(r => r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download = filename; a.click();
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return { error:'File is empty or has no data rows.' };
+  const headers = lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase());
+  for (const r of ['full_name','hire_date','target_net']) {
+    if (!headers.includes(r)) return { error:`Missing required column: "${r}"` };
+  }
+  const rows = [];
+  for (let i=1;i<lines.length;i++) {
+    if (!lines[i].trim()) continue;
+    const vals=[]; let cur='',inQ=false;
+    for (const ch of lines[i]) {
+      if (ch==='"') inQ=!inQ;
+      else if (ch===','&&!inQ){vals.push(cur.trim());cur='';}
+      else cur+=ch;
+    }
+    vals.push(cur.trim());
+    const obj={};
+    headers.forEach((h,idx)=>{obj[h]=(vals[idx]||'').replace(/^"|"$/g,'').trim();});
+    rows.push({_line:i+1,...obj});
+  }
+  return {headers,rows};
+}
+
+function validateEmpRow(row) {
+  const e=[];
+  if (!row.full_name) e.push('full_name required');
+  if (!row.hire_date||!/^\d{4}-\d{2}-\d{2}$/.test(row.hire_date)) e.push('hire_date must be YYYY-MM-DD');
+  if (!row.target_net||isNaN(Number(row.target_net))||Number(row.target_net)<=0) e.push('target_net must be positive number');
+  if (row.status&&!['active','inactive'].includes(row.status)) e.push('status must be active or inactive');
+  return e;
+}
+
+// ── EMPLOYEES TAB ─────────────────────────────────────────────────────────────
+const BLANK_EMP = {emp_code:'',full_name:'',national_id:'',department:'',job_title:'',hire_date:'',target_net:'',status:'active',bank_name:'',account_number:''};
+
 function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
   if (!modal) return null;
   return (
-    <Modal title={modal === 'add' ? 'Add Employee' : 'Edit Employee'} onClose={onClose}
+    <Modal title={modal==='add'?'Add Employee':'Edit Employee'} onClose={onClose}
       footer={<>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={onSave} disabled={saving}>{saving ? <><span className="spinner"></span> Saving…</> : 'Save Employee'}</button>
+        <button className="btn btn-primary" onClick={onSave} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save Employee'}</button>
       </>}>
       <div className="form-grid">
+        <Field label="Employee ID (auto)" field="emp_code" placeholder="EMP-001" form={form} setForm={setForm} readOnly={true} />
         <Field label="Full Name *" field="full_name" placeholder="Ahmed Hassan" form={form} setForm={setForm} />
         <Field label="National ID" field="national_id" placeholder="29901011234567" form={form} setForm={setForm} />
         <Field label="Department" field="department" placeholder="Sales" form={form} setForm={setForm} />
         <Field label="Job Title" field="job_title" placeholder="Sales Manager" form={form} setForm={setForm} />
         <Field label="Hire Date *" field="hire_date" type="date" form={form} setForm={setForm} />
-        <Field label="Target Net Salary (EGP/month) *" field="target_net" type="number" placeholder="15000" form={form} setForm={setForm} />
+        <Field label="Target Net (EGP/month) *" field="target_net" type="number" placeholder="15000" form={form} setForm={setForm} />
         <Field label="Bank Name" field="bank_name" placeholder="Banque Misr" form={form} setForm={setForm} />
         <Field label="Account Number" field="account_number" placeholder="1234567890123456" form={form} setForm={setForm} />
         <div className="form-group">
           <label>Status</label>
-          <select value={form.status||'active'} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+          <select value={form.status||'active'} onChange={e=>setForm(p=>({...p,status:e.target.value}))}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
@@ -662,311 +397,1111 @@ function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
   );
 }
 
-function EmployeesTab() {
-  const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState('');
-  const [form, setForm] = useState({...BLANK_EMP});
-  const [showBulk, setShowBulk] = useState(false);
+function BulkModal({ onClose, onDone, employees }) {
+  const [step,setStep]=useState('idle');
+  const [parsed,setParsed]=useState(null);
+  const [results,setResults]=useState(null);
+  const [dragOver,setDragOver]=useState(false);
+  const fileRef=useRef(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data } = await sb.from('employees').select('*').order('full_name');
-    setEmployees(data || []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const openAdd  = () => { setForm({...BLANK_EMP}); setModal('add'); };
-  const openEdit = (emp) => { setForm({...emp}); setModal(emp); };
-  const closeModal = () => setModal(null);
-
-  const save = async () => {
-    if (!form.full_name || !form.hire_date || !form.target_net) {
-      alert('Name, hire date, and target net are required.');
-      return;
-    }
-    setSaving(true);
-    if (modal === 'add') {
-      await sb.from('employees').insert({ ...form, target_net: Number(form.target_net) });
-    } else {
-      await sb.from('employees').update({ ...form, target_net: Number(form.target_net) }).eq('id', modal.id);
-    }
-    setSaving(false);
-    setModal(null);
-    load();
+  const handleFile = file => {
+    if(!file||!file.name.endsWith('.csv')){alert('Please upload a .csv file.');return;}
+    const r=new FileReader();
+    r.onload=e=>{const res=parseCSV(e.target.result);if(res.error){alert(res.error);return;}setParsed(res);setStep('preview');};
+    r.readAsText(file);
   };
 
-  const toggle = async (emp) => {
-    await sb.from('employees').update({ status: emp.status === 'active' ? 'inactive' : 'active' }).eq('id', emp.id);
-    load();
+  const upload = async () => {
+    setStep('uploading');
+    const valid=[],invalid=[];
+    for (const row of parsed.rows) {
+      const errs=validateEmpRow(row);
+      if(errs.length){invalid.push({row,errs});continue;}
+      // auto-generate emp_code if not in CSV
+      valid.push({
+        emp_code: row.emp_code || null, // will be set after we know max
+        full_name:row.full_name, national_id:row.national_id||null,
+        department:row.department||null, job_title:row.job_title||null,
+        hire_date:row.hire_date, target_net:Number(row.target_net),
+        status:row.status||'active', bank_name:row.bank_name||null,
+        account_number:row.account_number||null,
+      });
+    }
+    // assign emp_codes to those without
+    const existing = employees.map(e=>e.emp_code).filter(Boolean).map(c=>parseInt(c.replace(/\D/g,''),10)).filter(n=>!isNaN(n));
+    let counter = existing.length ? Math.max(...existing) : 0;
+    valid.forEach(v=>{ if(!v.emp_code) v.emp_code='EMP-'+String(++counter).padStart(3,'0'); });
+
+    let inserted=0,failed=0;
+    if(valid.length){
+      const {error}=await sb.from('employees').insert(valid);
+      if(error){failed=valid.length;}else inserted=valid.length;
+    }
+    setResults({inserted,skipped:invalid,failed});
+    setStep('done');
+    if(inserted>0&&onDone) onDone();
   };
 
-  const filtered = employees.filter(e =>
-    e.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    (e.department||'').toLowerCase().includes(search.toLowerCase())
-  );
-  const active = employees.filter(e => e.status === 'active').length;
+  const validRows  = parsed?parsed.rows.filter(r=>validateEmpRow(r).length===0):[];
+  const invalidRows= parsed?parsed.rows.filter(r=>validateEmpRow(r).length>0):[];
 
   return (
-    <>
-      <div className="stats">
-        <div className="stat accent">
-          <div className="stat-label">Total Employees</div>
-          <div className="stat-value">{employees.length}</div>
+    <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal modal-lg">
+        <div className="modal-header">
+          <div className="modal-title">
+            {step==='idle'&&'Bulk Upload / Export'}
+            {step==='preview'&&`Preview — ${parsed.rows.length} rows`}
+            {step==='uploading'&&'Uploading…'}
+            {step==='done'&&'Upload Complete'}
+          </div>
+          <button className="modal-close" onClick={onClose}>×</button>
         </div>
-        <div className="stat gold">
-          <div className="stat-label">Active</div>
-          <div className="stat-value">{active}</div>
+        <div className="modal-body">
+          {step==='idle'&&<>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
+              <div style={{border:'1px solid var(--border)',borderRadius:8,padding:18,textAlign:'center'}}>
+                <div style={{fontSize:26,marginBottom:6}}>⬇</div>
+                <div style={{fontWeight:600,marginBottom:4}}>Download Sample CSV</div>
+                <div style={{color:'var(--ink-light)',fontSize:12,marginBottom:12}}>Template with correct headers + 3 example rows</div>
+                <button className="btn btn-secondary" onClick={()=>downloadCSV(CSV_HEADERS,SAMPLE_ROWS,'Eterna_Employees_Sample.csv')}>Download Sample</button>
+              </div>
+              <div style={{border:'1px solid var(--border)',borderRadius:8,padding:18,textAlign:'center'}}>
+                <div style={{fontSize:26,marginBottom:6}}>📤</div>
+                <div style={{fontWeight:600,marginBottom:4}}>Export All Employees</div>
+                <div style={{color:'var(--ink-light)',fontSize:12,marginBottom:12}}>Download all {employees.length} employees</div>
+                <button className="btn btn-secondary" disabled={employees.length===0}
+                  onClick={()=>downloadCSV(CSV_HEADERS,employees.map(e=>[e.emp_code||'',e.full_name,e.national_id||'',e.department||'',e.job_title||'',e.hire_date,e.target_net,e.status,e.bank_name||'',e.account_number||'']),`Eterna_Employees_${today()}.csv`)}>
+                  Export All ({employees.length})
+                </button>
+              </div>
+            </div>
+            <div style={{borderTop:'1px solid var(--border)',paddingTop:18}}>
+              <div style={{fontWeight:600,marginBottom:10}}>Upload Employees CSV</div>
+              <div style={{border:`2px dashed ${dragOver?'var(--maroon)':'var(--border)'}`,borderRadius:8,padding:32,textAlign:'center',background:dragOver?'var(--maroon-faint)':'var(--bg)',cursor:'pointer',transition:'all .15s'}}
+                onClick={()=>fileRef.current.click()}
+                onDragOver={e=>{e.preventDefault();setDragOver(true);}}
+                onDragLeave={()=>setDragOver(false)}
+                onDrop={e=>{e.preventDefault();setDragOver(false);handleFile(e.dataTransfer.files[0]);}}>
+                <div style={{fontSize:28,marginBottom:6}}>📂</div>
+                <div style={{fontWeight:500,marginBottom:3}}>Drop CSV here or click to browse</div>
+                <div style={{fontSize:12,color:'var(--ink-light)'}}>CSV only · emp_code auto-assigned if blank</div>
+                <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handleFile(e.target.files[0])} />
+              </div>
+              <div style={{marginTop:10,fontSize:12,color:'var(--ink-light)'}}>
+                Required: <code>full_name</code>, <code>hire_date</code> (YYYY-MM-DD), <code>target_net</code><br/>
+                Optional: <code>emp_code</code> (auto if blank), <code>national_id</code>, <code>department</code>, <code>job_title</code>, <code>status</code>, <code>bank_name</code>, <code>account_number</code>
+              </div>
+            </div>
+          </>}
+
+          {step==='preview'&&<>
+            <div style={{display:'flex',gap:10,marginBottom:14}}>
+              <div style={{flex:1,background:'var(--success-bg)',border:'1px solid #B2DFCC',borderRadius:6,padding:'8px 12px',textAlign:'center'}}>
+                <div style={{fontSize:20,fontWeight:700,color:'var(--success)'}}>{validRows.length}</div>
+                <div style={{fontSize:11,color:'var(--success)'}}>Ready to insert</div>
+              </div>
+              <div style={{flex:1,background:'var(--danger-bg)',border:'1px solid #F5C6C2',borderRadius:6,padding:'8px 12px',textAlign:'center'}}>
+                <div style={{fontSize:20,fontWeight:700,color:'var(--danger)'}}>{invalidRows.length}</div>
+                <div style={{fontSize:11,color:'var(--danger)'}}>Will be skipped</div>
+              </div>
+            </div>
+            <div style={{maxHeight:300,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}}>
+              <table style={{fontSize:12}}>
+                <thead><tr><th>#</th><th>Code</th><th>Name</th><th>Dept</th><th>Hire Date</th><th>Target Net</th><th>Issues</th></tr></thead>
+                <tbody>
+                  {parsed.rows.map(row=>{
+                    const errs=validateEmpRow(row);
+                    return <tr key={row._line} style={{background:errs.length?'#FFF8F8':''}}>
+                      <td style={{color:'var(--ink-light)'}}>{row._line}</td>
+                      <td style={{color:'var(--ink-light)'}}>{row.emp_code||<span style={{color:'var(--gold)'}}>auto</span>}</td>
+                      <td style={{fontWeight:500}}>{row.full_name||<span style={{color:'var(--danger)'}}>—</span>}</td>
+                      <td>{row.department||'—'}</td>
+                      <td style={{color:/^\d{4}-\d{2}-\d{2}$/.test(row.hire_date)?'inherit':'var(--danger)'}}>{row.hire_date||'—'}</td>
+                      <td style={{color:!isNaN(Number(row.target_net))&&row.target_net?'inherit':'var(--danger)'}}>{row.target_net||'—'}</td>
+                      <td style={{color:'var(--danger)',fontSize:11}}>{errs.join('; ')||<span style={{color:'var(--success)'}}>✓</span>}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {invalidRows.length>0&&<div className="alert alert-info" style={{marginTop:10,marginBottom:0}}>{invalidRows.length} row(s) with errors will be skipped.</div>}
+          </>}
+
+          {step==='uploading'&&<div style={{textAlign:'center',padding:'32px 0'}}><div style={{fontSize:32,marginBottom:10}}>⏳</div><div style={{fontWeight:500}}>Inserting employees…</div></div>}
+
+          {step==='done'&&results&&<div style={{textAlign:'center',padding:'20px 0'}}>
+            <div style={{fontSize:44,marginBottom:10}}>{results.inserted>0?'✅':'⚠️'}</div>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>{results.inserted} employee(s) added successfully</div>
+            {results.failed>0&&<div style={{color:'var(--danger)'}}>{results.failed} rows failed (database error)</div>}
+            {results.skipped.length>0&&<div style={{color:'var(--ink-light)',fontSize:13}}>{results.skipped.length} row(s) skipped due to validation errors</div>}
+          </div>}
         </div>
-        <div className="stat">
-          <div className="stat-label">Inactive</div>
-          <div className="stat-value">{employees.length - active}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">Departments</div>
-          <div className="stat-value">{[...new Set(employees.map(e => e.department).filter(Boolean))].length}</div>
+        <div className="modal-footer">
+          {step==='idle'&&<button className="btn btn-secondary" onClick={onClose}>Close</button>}
+          {step==='preview'&&<><button className="btn btn-secondary" onClick={()=>setStep('idle')}>← Back</button><button className="btn btn-primary" onClick={upload} disabled={validRows.length===0}>Insert {validRows.length} Employee(s)</button></>}
+          {step==='done'&&<button className="btn btn-primary" onClick={onClose}>Done</button>}
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="card">
-        <div className="card-header">
-          <div className="card-title">Employee Directory</div>
-          <div className="flex">
-            <input placeholder="Search name or department…" value={search} onChange={e => setSearch(e.target.value)} style={{ width:220 }} />
-            <button className="btn btn-secondary" onClick={() => setShowBulk(true)}>⬆⬇ Bulk / Export</button>
-            <button className="btn btn-primary" onClick={openAdd}>+ Add Employee</button>
-          </div>
+// Assign IDs to existing employees who don't have one
+async function assignMissingEmpCodes(employees) {
+  const missing = employees.filter(e => !e.emp_code);
+  if (!missing.length) return 0;
+  const existing = employees.filter(e=>e.emp_code).map(e=>parseInt(e.emp_code.replace(/\D/g,''),10)).filter(n=>!isNaN(n));
+  let counter = existing.length ? Math.max(...existing) : 0;
+  for (const emp of missing) {
+    const code = 'EMP-' + String(++counter).padStart(3,'0');
+    await sb.from('employees').update({emp_code: code}).eq('id', emp.id);
+  }
+  return missing.length;
+}
+
+function EmployeesTab() {
+  const [employees,setEmployees]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [modal,setModal]=useState(null);
+  const [saving,setSaving]=useState(false);
+  const [search,setSearch]=useState('');
+  const [form,setForm]=useState({...BLANK_EMP});
+  const [showBulk,setShowBulk]=useState(false);
+  const [assigning,setAssigning]=useState(false);
+
+  const load = useCallback(async()=>{
+    setLoading(true);
+    const {data}=await sb.from('employees').select('*').order('emp_code',{nullsFirst:false}).order('full_name');
+    setEmployees(data||[]);
+    setLoading(false);
+  },[]);
+
+  useEffect(()=>{load();},[load]);
+
+  const openAdd = ()=>{
+    const code = nextEmpCode(employees);
+    setForm({...BLANK_EMP, emp_code: code});
+    setModal('add');
+  };
+  const openEdit=(emp)=>{setForm({...emp});setModal(emp);};
+  const closeModal=()=>setModal(null);
+
+  const save = async()=>{
+    if(!form.full_name||!form.hire_date||!form.target_net){alert('Name, hire date, and target net are required.');return;}
+    setSaving(true);
+    if(modal==='add'){
+      await sb.from('employees').insert({...form,target_net:Number(form.target_net)});
+    } else {
+      await sb.from('employees').update({...form,target_net:Number(form.target_net)}).eq('id',modal.id);
+    }
+    setSaving(false);setModal(null);load();
+  };
+
+  const toggle=async(emp)=>{
+    await sb.from('employees').update({status:emp.status==='active'?'inactive':'active'}).eq('id',emp.id);
+    load();
+  };
+
+  const doAssignCodes = async()=>{
+    setAssigning(true);
+    const n = await assignMissingEmpCodes(employees);
+    setAssigning(false);
+    if(n>0){alert(`${n} employee(s) assigned new IDs.`);load();}
+    else alert('All employees already have IDs.');
+  };
+
+  const filtered=employees.filter(e=>
+    e.full_name.toLowerCase().includes(search.toLowerCase())||
+    (e.department||'').toLowerCase().includes(search.toLowerCase())||
+    (e.emp_code||'').toLowerCase().includes(search.toLowerCase())
+  );
+  const active=employees.filter(e=>e.status==='active').length;
+  const missingCodes=employees.filter(e=>!e.emp_code).length;
+
+  return (<>
+    {missingCodes>0&&<div className="alert alert-warn mb-24">
+      {missingCodes} employee(s) are missing Employee IDs.{' '}
+      <button className="btn btn-sm btn-secondary" onClick={doAssignCodes} disabled={assigning}>
+        {assigning?'Assigning…':'Auto-assign IDs now'}
+      </button>
+    </div>}
+
+    <div className="stats">
+      <div className="stat accent"><div className="stat-label">Total</div><div className="stat-value">{employees.length}</div></div>
+      <div className="stat gold"><div className="stat-label">Active</div><div className="stat-value">{active}</div></div>
+      <div className="stat"><div className="stat-label">Inactive</div><div className="stat-value">{employees.length-active}</div></div>
+      <div className="stat"><div className="stat-label">Departments</div><div className="stat-value">{[...new Set(employees.map(e=>e.department).filter(Boolean))].length}</div></div>
+    </div>
+
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Employee Directory</div>
+        <div className="flex">
+          <input placeholder="Search name, code, dept…" value={search} onChange={e=>setSearch(e.target.value)} style={{width:200}} />
+          <button className="btn btn-secondary" onClick={()=>setShowBulk(true)}>⬆⬇ Bulk / Export</button>
+          <button className="btn btn-primary" onClick={openAdd}>+ Add Employee</button>
         </div>
-        <div className="tbl-wrap">
-          {loading ? <div className="empty"><div className="empty-text">Loading…</div></div> :
-          filtered.length === 0 ? <div className="empty"><div className="empty-icon">👤</div><div className="empty-text">No employees yet. Add one to get started.</div></div> :
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th><th>National ID</th><th>Department</th><th>Job Title</th>
-                <th>Hire Date</th><th className="tbl-num">Target Net (EGP)</th><th>Bank</th><th>Account No.</th><th>Status</th><th></th>
+      </div>
+      <div className="tbl-wrap">
+        {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+        filtered.length===0?<div className="empty"><div className="empty-icon">👤</div><div className="empty-text">No employees found.</div></div>:
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>National ID</th><th>Department</th><th>Job Title</th><th>Hire Date</th><th className="tbl-num">Target Net</th><th>Bank</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {filtered.map(emp=>(
+              <tr key={emp.id}>
+                <td><span style={{fontFamily:'monospace',fontWeight:600,color:'var(--maroon)',fontSize:12}}>{emp.emp_code||<span style={{color:'var(--ink-light)'}}>—</span>}</span></td>
+                <td style={{fontWeight:500}}>{emp.full_name}</td>
+                <td className="text-muted">{emp.national_id||'—'}</td>
+                <td>{emp.department||'—'}</td>
+                <td>{emp.job_title||'—'}</td>
+                <td>{emp.hire_date}</td>
+                <td className="tbl-num">{fmt(emp.target_net)}</td>
+                <td style={{fontSize:12}}>{emp.bank_name||'—'}</td>
+                <td><span className={`badge badge-${emp.status}`}>{emp.status}</span></td>
+                <td><div className="flex">
+                  <button className="btn btn-secondary btn-sm" onClick={()=>openEdit(emp)}>Edit</button>
+                  <button className="btn btn-sm" style={{background:'none',color:'var(--ink-light)',border:'1px solid var(--border)'}} onClick={()=>toggle(emp)}>
+                    {emp.status==='active'?'Deactivate':'Activate'}
+                  </button>
+                </div></td>
               </tr>
-            </thead>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+
+    {showBulk&&<BulkModal onClose={()=>setShowBulk(false)} onDone={load} employees={employees} />}
+    <EmpModal modal={modal} form={form} setForm={setForm} saving={saving} onClose={closeModal} onSave={save} />
+  </>);
+}
+
+// ── LOANS TAB ─────────────────────────────────────────────────────────────────
+const BLANK_LOAN={employee_id:'',amount:'',reason:'',date_issued:today(),monthly_deduction:'',status:'active'};
+
+function LoansTab() {
+  const [loans,setLoans]=useState([]);
+  const [employees,setEmployees]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [modal,setModal]=useState(null);
+  const [form,setForm]=useState({...BLANK_LOAN});
+  const [saving,setSaving]=useState(false);
+  const [filter,setFilter]=useState('active');
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const [{data:l},{data:e}]=await Promise.all([
+      sb.from('loans').select('*,employees(full_name,emp_code)').order('date_issued',{ascending:false}),
+      sb.from('employees').select('id,full_name,emp_code').eq('status','active').order('full_name'),
+    ]);
+    setLoans(l||[]);setEmployees(e||[]);setLoading(false);
+  },[]);
+
+  useEffect(()=>{load();},[load]);
+
+  const save=async()=>{
+    if(!form.employee_id||!form.amount||!form.monthly_deduction){alert('Employee, amount, and monthly deduction are required.');return;}
+    setSaving(true);
+    const payload={
+      employee_id:form.employee_id,
+      amount:Number(form.amount),
+      reason:form.reason||null,
+      date_issued:form.date_issued,
+      monthly_deduction:Number(form.monthly_deduction),
+      remaining_balance:modal==='add'?Number(form.amount):(form.remaining_balance!==undefined?Number(form.remaining_balance):Number(form.amount)),
+      status:'active',
+    };
+    if(modal==='add') await sb.from('loans').insert(payload);
+    else await sb.from('loans').update(payload).eq('id',modal.id);
+    setSaving(false);setModal(null);load();
+  };
+
+  const settle=async(loan)=>{
+    if(!confirm('Mark this loan as settled?')) return;
+    await sb.from('loans').update({status:'settled',remaining_balance:0}).eq('id',loan.id);
+    load();
+  };
+
+  const filtered=loans.filter(l=>filter==='all'||l.status===filter);
+  const totalOut=loans.filter(l=>l.status==='active').reduce((s,l)=>s+(l.remaining_balance||0),0);
+
+  return (<>
+    <div className="stats">
+      <div className="stat accent"><div className="stat-label">Active Loans</div><div className="stat-value">{loans.filter(l=>l.status==='active').length}</div></div>
+      <div className="stat gold"><div className="stat-label">Total Outstanding</div><div className="stat-value" style={{fontSize:16}}>EGP {fmt(totalOut)}</div></div>
+      <div className="stat"><div className="stat-label">Settled</div><div className="stat-value">{loans.filter(l=>l.status==='settled').length}</div></div>
+      <div className="stat"><div className="stat-label">Total Loans</div><div className="stat-value">{loans.length}</div></div>
+    </div>
+
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Loan Register</div>
+        <div className="flex">
+          <select value={filter} onChange={e=>setFilter(e.target.value)} style={{width:120}}>
+            <option value="active">Active</option>
+            <option value="settled">Settled</option>
+            <option value="all">All</option>
+          </select>
+          <button className="btn btn-primary" onClick={()=>{setForm({...BLANK_LOAN});setModal('add');}}>+ New Loan</button>
+        </div>
+      </div>
+      <div className="tbl-wrap">
+        {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+        filtered.length===0?<div className="empty"><div className="empty-icon">💳</div><div className="empty-text">No loans found.</div></div>:
+        <table>
+          <thead><tr><th>Employee</th><th>Reason</th><th>Date Issued</th><th className="tbl-num">Loan Amount</th><th className="tbl-num">Monthly Ded.</th><th className="tbl-num">Remaining</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {filtered.map(l=>(
+              <tr key={l.id}>
+                <td style={{fontWeight:500}}>{l.employees?.full_name}<br/><span style={{fontSize:11,color:'var(--ink-light)'}}>{l.employees?.emp_code}</span></td>
+                <td>{l.reason||'—'}</td>
+                <td>{l.date_issued}</td>
+                <td className="tbl-num">{fmt(l.amount)}</td>
+                <td className="tbl-num">{fmt(l.monthly_deduction)}</td>
+                <td className="tbl-num" style={{fontWeight:600,color:l.status==='active'?'var(--danger)':'var(--ink-light)'}}>{fmt(l.remaining_balance)}</td>
+                <td><span className={`badge badge-${l.status==='active'?'active-loan':'settled'}`}>{l.status}</span></td>
+                <td><div className="flex">
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setForm({...l});setModal(l);}}>Edit</button>
+                  {l.status==='active'&&<button className="btn btn-sm btn-success" onClick={()=>settle(l)}>Settle</button>}
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+
+    {modal&&<Modal title={modal==='add'?'New Loan':'Edit Loan'} onClose={()=>setModal(null)}
+      footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
+      <div className="form-grid">
+        <div className="form-group">
+          <label>Employee *</label>
+          <select value={form.employee_id||''} onChange={e=>setForm(p=>({...p,employee_id:e.target.value}))}>
+            <option value="">Select employee…</option>
+            {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+          </select>
+        </div>
+        <Field label="Date Issued" field="date_issued" type="date" form={form} setForm={setForm} />
+        <Field label="Loan Amount (EGP) *" field="amount" type="number" placeholder="5000" form={form} setForm={setForm} />
+        <Field label="Monthly Deduction (EGP) *" field="monthly_deduction" type="number" placeholder="500" form={form} setForm={setForm} />
+        {modal!=='add'&&<Field label="Remaining Balance (EGP)" field="remaining_balance" type="number" form={form} setForm={setForm} />}
+        <div className="form-group full">
+          <label>Reason / Note</label>
+          <input value={form.reason||''} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} placeholder="Personal loan, emergency, etc." />
+        </div>
+      </div>
+    </Modal>}
+  </>);
+}
+
+// ── LEAVE TAB ─────────────────────────────────────────────────────────────────
+function LeaveTab() {
+  const [balances,setBalances]=useState([]);
+  const [employees,setEmployees]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [modal,setModal]=useState(null);
+  const [form,setForm]=useState({employee_id:'',year:new Date().getFullYear(),annual_entitlement:'',used_days:0,manual_override:false});
+  const [saving,setSaving]=useState(false);
+  const year=new Date().getFullYear();
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const [{data:b},{data:e}]=await Promise.all([
+      sb.from('leave_balances').select('*,employees(full_name,emp_code,hire_date)').eq('year',year).order('employees(full_name)'),
+      sb.from('employees').select('id,full_name,emp_code,hire_date').eq('status','active').order('full_name'),
+    ]);
+    setBalances(b||[]);setEmployees(e||[]);setLoading(false);
+  },[year]);
+
+  useEffect(()=>{load();},[load]);
+
+  const autoInit=async()=>{
+    if(!confirm(`Auto-initialize ${year} leave balances for all active employees without one?`)) return;
+    const existing=new Set(balances.map(b=>b.employee_id));
+    const toCreate=employees.filter(e=>!existing.has(e.id)).map(e=>({
+      employee_id:e.id,year,
+      annual_entitlement:leaveEntitlement(e.hire_date,year),
+      used_days:0,
+      remaining_days:leaveEntitlement(e.hire_date,year),
+      manual_override:false,
+    }));
+    if(!toCreate.length){alert('All employees already have balances for this year.');return;}
+    await sb.from('leave_balances').insert(toCreate);
+    alert(`${toCreate.length} balances created.`);
+    load();
+  };
+
+  const save=async()=>{
+    setSaving(true);
+    const entitlement=Number(form.annual_entitlement);
+    const used=Number(form.used_days||0);
+    const payload={employee_id:form.employee_id,year:Number(form.year),annual_entitlement:entitlement,used_days:used,remaining_days:entitlement-used,manual_override:!!form.manual_override};
+    if(modal==='add') await sb.from('leave_balances').insert(payload);
+    else await sb.from('leave_balances').update(payload).eq('id',modal.id);
+    setSaving(false);setModal(null);load();
+  };
+
+  const openAdd=(emp)=>{
+    const entitlement=leaveEntitlement(emp.hire_date,year);
+    setForm({employee_id:emp.id,year,annual_entitlement:entitlement,used_days:0,manual_override:false});
+    setModal('add');
+  };
+
+  return (<>
+    <div className="card mb-24">
+      <div className="card-header">
+        <div className="card-title">Leave Balances — {year}</div>
+        <div className="flex">
+          <button className="btn btn-secondary" onClick={autoInit}>⚡ Auto-Init All</button>
+          <button className="btn btn-primary" onClick={()=>{setForm({employee_id:'',year,annual_entitlement:21,used_days:0,manual_override:false});setModal('add');}}>+ Add Balance</button>
+        </div>
+      </div>
+      <div className="tbl-wrap">
+        {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+        balances.length===0?<div className="empty"><div className="empty-icon">🏖️</div><div className="empty-text">No leave balances for {year}. Click "Auto-Init All" to create them.</div></div>:
+        <table>
+          <thead><tr><th>Employee</th><th>Hire Date</th><th className="tbl-num">Entitlement</th><th className="tbl-num">Used</th><th className="tbl-num">Remaining</th><th>Override</th><th></th></tr></thead>
+          <tbody>
+            {balances.map(b=>(
+              <tr key={b.id}>
+                <td style={{fontWeight:500}}>{b.employees?.full_name}<br/><span style={{fontSize:11,color:'var(--ink-light)'}}>{b.employees?.emp_code}</span></td>
+                <td className="text-muted">{b.employees?.hire_date}</td>
+                <td className="tbl-num">{b.annual_entitlement} days</td>
+                <td className="tbl-num">{b.used_days} days</td>
+                <td className="tbl-num" style={{fontWeight:700,color:b.remaining_days>0?'var(--success)':'var(--danger)'}}>{b.remaining_days} days</td>
+                <td><span className="text-muted" style={{fontSize:12}}>{b.manual_override?'Manual':'Auto'}</span></td>
+                <td><button className="btn btn-secondary btn-sm" onClick={()=>{setForm({...b});setModal(b);}}>Edit</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+
+    <div className="card">
+      <div className="card-header"><div className="card-title">Employees Without {year} Balance</div></div>
+      <div className="tbl-wrap">
+        {employees.filter(e=>!balances.find(b=>b.employee_id===e.id)).length===0
+          ?<div className="empty"><div className="empty-text">All employees have balances for {year}. ✓</div></div>
+          :<table>
+            <thead><tr><th>Employee</th><th>Hire Date</th><th className="tbl-num">Auto Entitlement</th><th></th></tr></thead>
             <tbody>
-              {filtered.map(emp => (
-                <tr key={emp.id}>
-                  <td style={{ fontWeight:500 }}>{emp.full_name}</td>
-                  <td className="text-muted">{emp.national_id || '—'}</td>
-                  <td>{emp.department || '—'}</td>
-                  <td>{emp.job_title || '—'}</td>
-                  <td>{emp.hire_date}</td>
-                  <td className="tbl-num">{fmt(emp.target_net)}</td>
-                  <td>{emp.bank_name || '—'}</td>
-                  <td>{emp.account_number || '—'}</td>
-                  <td><span className={`badge badge-${emp.status}`}>{emp.status}</span></td>
-                  <td>
-                    <div className="flex">
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(emp)}>Edit</button>
-                      <button className="btn btn-sm" style={{ background:'none', color:'var(--ink-light)', border:'1px solid var(--border)' }} onClick={() => toggle(emp)}>
-                        {emp.status === 'active' ? 'Deactivate' : 'Activate'}
-                      </button>
-                    </div>
-                  </td>
+              {employees.filter(e=>!balances.find(b=>b.employee_id===e.id)).map(e=>(
+                <tr key={e.id}>
+                  <td style={{fontWeight:500}}>{e.full_name} <span style={{fontSize:11,color:'var(--ink-light)'}}>{e.emp_code}</span></td>
+                  <td>{e.hire_date}</td>
+                  <td className="tbl-num">{leaveEntitlement(e.hire_date,year)} days</td>
+                  <td><button className="btn btn-secondary btn-sm" onClick={()=>openAdd(e)}>Add Balance</button></td>
                 </tr>
               ))}
             </tbody>
           </table>}
+      </div>
+    </div>
+
+    {modal&&<Modal title={modal==='add'?'Add Leave Balance':'Edit Leave Balance'} onClose={()=>setModal(null)}
+      footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
+      <div className="form-grid">
+        <div className="form-group">
+          <label>Employee</label>
+          <select value={form.employee_id||''} onChange={e=>setForm(p=>({...p,employee_id:e.target.value}))} disabled={modal!=='add'}>
+            <option value="">Select…</option>
+            {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+          </select>
+        </div>
+        <Field label="Year" field="year" type="number" form={form} setForm={setForm} />
+        <Field label="Annual Entitlement (days)" field="annual_entitlement" type="number" form={form} setForm={setForm} />
+        <Field label="Used Days (so far)" field="used_days" type="number" form={form} setForm={setForm} />
+        <div className="form-group full">
+          <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+            <input type="checkbox" style={{width:'auto'}} checked={!!form.manual_override} onChange={e=>setForm(p=>({...p,manual_override:e.target.checked}))} />
+            Manual override (don't auto-recalculate entitlement)
+          </label>
         </div>
       </div>
+      <div className="alert alert-info" style={{marginTop:12,marginBottom:0}}>
+        Remaining = Entitlement − Used = <strong>{(Number(form.annual_entitlement||0)-Number(form.used_days||0))} days</strong>
+      </div>
+    </Modal>}
+  </>);
+}
 
-      {showBulk && <BulkModal onClose={() => setShowBulk(false)} onDone={load} employees={employees} />}
-      <EmpModal modal={modal} form={form} setForm={setForm} saving={saving} onClose={closeModal} onSave={save} />
-    </>
-  );
+// ── ALLOWANCES TAB ────────────────────────────────────────────────────────────
+const BLANK_ALLOW={employee_id:'',name:'',amount:'',type:'fixed',active:true};
+
+function AllowancesTab() {
+  const [allowances,setAllowances]=useState([]);
+  const [employees,setEmployees]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [modal,setModal]=useState(null);
+  const [form,setForm]=useState({...BLANK_ALLOW});
+  const [saving,setSaving]=useState(false);
+  const [filterEmp,setFilterEmp]=useState('');
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const [{data:a},{data:e}]=await Promise.all([
+      sb.from('allowances').select('*,employees(full_name,emp_code)').order('employees(full_name)'),
+      sb.from('employees').select('id,full_name,emp_code').eq('status','active').order('full_name'),
+    ]);
+    setAllowances(a||[]);setEmployees(e||[]);setLoading(false);
+  },[]);
+
+  useEffect(()=>{load();},[load]);
+
+  const save=async()=>{
+    if(!form.employee_id||!form.name||!form.amount){alert('Employee, name, and amount are required.');return;}
+    setSaving(true);
+    const payload={employee_id:form.employee_id,name:form.name,amount:Number(form.amount),type:form.type||'fixed',active:form.active!==false};
+    if(modal==='add') await sb.from('allowances').insert(payload);
+    else await sb.from('allowances').update(payload).eq('id',modal.id);
+    setSaving(false);setModal(null);load();
+  };
+
+  const toggle=async(a)=>{
+    await sb.from('allowances').update({active:!a.active}).eq('id',a.id);
+    load();
+  };
+
+  const filtered=allowances.filter(a=>!filterEmp||a.employee_id===filterEmp);
+  const totalFixed=allowances.filter(a=>a.type==='fixed'&&a.active).reduce((s,a)=>s+Number(a.amount),0);
+
+  return (<>
+    <div className="stats">
+      <div className="stat accent"><div className="stat-label">Total Allowances</div><div className="stat-value">{allowances.length}</div></div>
+      <div className="stat gold"><div className="stat-label">Active Fixed / Month</div><div className="stat-value" style={{fontSize:16}}>EGP {fmt(totalFixed)}</div></div>
+      <div className="stat"><div className="stat-label">Active</div><div className="stat-value">{allowances.filter(a=>a.active).length}</div></div>
+      <div className="stat"><div className="stat-label">Inactive</div><div className="stat-value">{allowances.filter(a=>!a.active).length}</div></div>
+    </div>
+
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Allowances</div>
+        <div className="flex">
+          <select value={filterEmp} onChange={e=>setFilterEmp(e.target.value)} style={{width:200}}>
+            <option value="">All employees</option>
+            {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+          </select>
+          <button className="btn btn-primary" onClick={()=>{setForm({...BLANK_ALLOW});setModal('add');}}>+ Add Allowance</button>
+        </div>
+      </div>
+      <div className="tbl-wrap">
+        {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+        filtered.length===0?<div className="empty"><div className="empty-icon">💰</div><div className="empty-text">No allowances found.</div></div>:
+        <table>
+          <thead><tr><th>Employee</th><th>Allowance Name</th><th>Type</th><th className="tbl-num">Amount (EGP)</th><th>Active</th><th></th></tr></thead>
+          <tbody>
+            {filtered.map(a=>(
+              <tr key={a.id}>
+                <td style={{fontWeight:500}}>{a.employees?.full_name}<br/><span style={{fontSize:11,color:'var(--ink-light)'}}>{a.employees?.emp_code}</span></td>
+                <td>{a.name}</td>
+                <td><span className={`badge ${a.type==='fixed'?'badge-active':'badge-draft'}`}>{a.type}</span></td>
+                <td className="tbl-num">{fmt(a.amount)}</td>
+                <td><span className={`badge ${a.active?'badge-active':'badge-inactive'}`}>{a.active?'Active':'Inactive'}</span></td>
+                <td><div className="flex">
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setForm({...a});setModal(a);}}>Edit</button>
+                  <button className="btn btn-sm" style={{background:'none',border:'1px solid var(--border)',color:'var(--ink-light)'}} onClick={()=>toggle(a)}>{a.active?'Disable':'Enable'}</button>
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+
+    {modal&&<Modal title={modal==='add'?'Add Allowance':'Edit Allowance'} onClose={()=>setModal(null)}
+      footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
+      <div className="form-grid">
+        <div className="form-group">
+          <label>Employee *</label>
+          <select value={form.employee_id||''} onChange={e=>setForm(p=>({...p,employee_id:e.target.value}))}>
+            <option value="">Select…</option>
+            {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+          </select>
+        </div>
+        <Field label="Allowance Name *" field="name" placeholder="Transport, Housing…" form={form} setForm={setForm} />
+        <Field label="Amount (EGP) *" field="amount" type="number" form={form} setForm={setForm} />
+        <div className="form-group">
+          <label>Type</label>
+          <select value={form.type||'fixed'} onChange={e=>setForm(p=>({...p,type:e.target.value}))}>
+            <option value="fixed">Fixed (every month)</option>
+            <option value="variable">Variable (per run)</option>
+          </select>
+        </div>
+      </div>
+    </Modal>}
+  </>);
+}
+
+// ── PENALTY TYPES TAB ─────────────────────────────────────────────────────────
+function PenaltyTypesTab() {
+  const [types,setTypes]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [modal,setModal]=useState(null);
+  const [form,setForm]=useState({name:'',description:'',default_amount:''});
+  const [saving,setSaving]=useState(false);
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const {data}=await sb.from('penalty_types').select('*').order('name');
+    setTypes(data||[]);setLoading(false);
+  },[]);
+
+  useEffect(()=>{load();},[load]);
+
+  const save=async()=>{
+    if(!form.name){alert('Name is required.');return;}
+    setSaving(true);
+    const payload={name:form.name,description:form.description||null,default_amount:form.default_amount?Number(form.default_amount):null};
+    if(modal==='add') await sb.from('penalty_types').insert(payload);
+    else await sb.from('penalty_types').update(payload).eq('id',modal.id);
+    setSaving(false);setModal(null);load();
+  };
+
+  const del=async(t)=>{
+    if(!confirm('Delete this penalty type?')) return;
+    await sb.from('penalty_types').delete().eq('id',t.id);
+    load();
+  };
+
+  return (<>
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Penalty Types</div>
+        <button className="btn btn-primary" onClick={()=>{setForm({name:'',description:'',default_amount:''});setModal('add');}}>+ Add Type</button>
+      </div>
+      <div className="tbl-wrap">
+        {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+        types.length===0?<div className="empty"><div className="empty-icon">⚠️</div><div className="empty-text">No penalty types defined yet. Add types to use in payroll runs.</div></div>:
+        <table>
+          <thead><tr><th>Name</th><th>Description</th><th className="tbl-num">Default Amount (EGP)</th><th></th></tr></thead>
+          <tbody>
+            {types.map(t=>(
+              <tr key={t.id}>
+                <td style={{fontWeight:600}}>{t.name}</td>
+                <td className="text-muted">{t.description||'—'}</td>
+                <td className="tbl-num">{t.default_amount?fmt(t.default_amount):'—'}</td>
+                <td><div className="flex">
+                  <button className="btn btn-secondary btn-sm" onClick={()=>{setForm({...t});setModal(t);}}>Edit</button>
+                  <button className="btn btn-danger btn-sm" onClick={()=>del(t)}>Delete</button>
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+
+    {modal&&<Modal title={modal==='add'?'Add Penalty Type':'Edit Penalty Type'} onClose={()=>setModal(null)}
+      footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
+      <div className="form-grid">
+        <Field label="Name *" field="name" placeholder="Absence, Misconduct…" form={form} setForm={setForm} />
+        <Field label="Default Amount (EGP, optional)" field="default_amount" type="number" form={form} setForm={setForm} />
+        <div className="form-group full">
+          <label>Description</label>
+          <input value={form.description||''} onChange={e=>setForm(p=>({...p,description:e.target.value}))} placeholder="Brief explanation of this penalty type" />
+        </div>
+      </div>
+    </Modal>}
+  </>);
 }
 
 // ── RUN PAYROLL TAB ───────────────────────────────────────────────────────────
-function RunPayrollTab({ onRunCreated }) {
-  const [month, setMonth] = useState(today().slice(0,7));
-  const [closing, setClosing] = useState(today());
-  const [preview, setPreview] = useState(null);
-  const [calculating, setCalculating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null);
+function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
+  const gross   = grossUp(emp.target_net);
+  const hourly  = gross / 26 / 8;
+  const daily   = gross / 30;
+  const otRate  = hourly * 1.35;
 
-  const calculate = async () => {
-    setCalculating(true);
-    setMsg(null);
-    const { data: emps } = await sb.from('employees').select('*').eq('status', 'active');
-    if (!emps || emps.length === 0) { setMsg({ type:'danger', text:'No active employees found.' }); setCalculating(false); return; }
-    const lines = emps.map(e => calcEmployee(e, closing));
-    setPreview(lines);
-    setCalculating(false);
-  };
-
-  const finalize = async () => {
-    if (!preview) return;
-    setSaving(true);
-    const { data: run, error } = await sb.from('payroll_runs').insert({ month, closing_date: closing, status: 'draft' }).select().single();
-    if (error) { setMsg({ type:'danger', text:'Failed to create run: ' + error.message }); setSaving(false); return; }
-    const inserts = preview.map(l => ({ run_id: run.id, employee_id: l.employee_id, pro_rata_factor: l.pro_rata_factor, gross_full: l.gross_full, si_base: l.si_base, emp_si: l.emp_si, annual_taxable: l.annual_taxable, monthly_tax: l.monthly_tax, total_deductions: l.total_deductions, net_full: l.net_full, employer_si: l.employer_si, dispensed_gross: l.dispensed_gross, dispensed_emp_si: l.dispensed_emp_si, dispensed_tax: l.dispensed_tax, dispensed_deductions: l.dispensed_deductions, dispensed_net: l.dispensed_net, dispensed_er_si: l.dispensed_er_si, total_employer_cost: l.total_employer_cost }));
-    await sb.from('payroll_lines').insert(inserts);
-    await sb.from('payroll_runs').update({ status: 'finalized' }).eq('id', run.id);
-    setMsg({ type:'success', text:'Payroll run finalized and saved.' });
-    setPreview(null);
-    setSaving(false);
-    if (onRunCreated) onRunCreated();
-  };
-
-  const totals = preview ? {
-    dispensed_gross: preview.reduce((s,l) => s + l.dispensed_gross, 0),
-    dispensed_emp_si: preview.reduce((s,l) => s + l.dispensed_emp_si, 0),
-    dispensed_tax: preview.reduce((s,l) => s + l.dispensed_tax, 0),
-    dispensed_net: preview.reduce((s,l) => s + l.dispensed_net, 0),
-    dispensed_er_si: preview.reduce((s,l) => s + l.dispensed_er_si, 0),
-    total_employer_cost: preview.reduce((s,l) => s + l.total_employer_cost, 0),
-  } : null;
+  const u = (field, val) => onChange({ ...adj, [field]: val });
 
   return (
-    <>
-      {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
-      <div className="card mb-24">
-        <div className="card-header"><div className="card-title">Payroll Run Parameters</div></div>
-        <div className="card-body">
-          <div className="form-grid-3">
-            <div className="form-group">
-              <label>Payroll Month</label>
-              <input type="month" value={month} onChange={e => setMonth(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Month Closing Date</label>
-              <input type="date" value={closing} onChange={e => setClosing(e.target.value)} />
-            </div>
-            <div className="form-group" style={{ justifyContent:'flex-end' }}>
-              <label>&nbsp;</label>
-              <button className="btn btn-primary" onClick={calculate} disabled={calculating}>
-                {calculating ? <><span className="spinner"></span> Calculating…</> : '⚡ Calculate Payroll'}
-              </button>
-            </div>
+    <div className="adj-panel">
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+
+        {/* OT */}
+        <div className="adj-section">
+          <div className="section-title">Overtime</div>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label>Hours</label>
+            <input type="number" min="0" value={adj.ot_hours||''} onChange={e=>u('ot_hours',e.target.value)} placeholder="0" />
+          </div>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label>Rate (EGP/hr) — default 1.35×</label>
+            <input type="number" min="0" value={adj.ot_rate_custom||''} onChange={e=>u('ot_rate_custom',e.target.value)} placeholder={otRate.toFixed(2)} />
+          </div>
+          <div style={{fontSize:12,color:'var(--success)',fontWeight:600}}>
+            Value: EGP {fmt((Number(adj.ot_hours||0)) * (adj.ot_rate_custom?Number(adj.ot_rate_custom):otRate))}
           </div>
         </div>
+
+        {/* Lateness */}
+        <div className="adj-section">
+          <div className="section-title">Lateness</div>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label>Days</label>
+            <input type="number" min="0" value={adj.late_days||''} onChange={e=>u('late_days',e.target.value)} placeholder="0" />
+          </div>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label>Hours</label>
+            <input type="number" min="0" value={adj.late_hours||''} onChange={e=>u('late_hours',e.target.value)} placeholder="0" />
+          </div>
+          <div style={{fontSize:12,color:'var(--danger)',fontWeight:600}}>
+            Deduct: EGP {fmt(Number(adj.late_days||0)*daily + Number(adj.late_hours||0)*hourly)}
+          </div>
+        </div>
+
+        {/* Leave */}
+        <div className="adj-section">
+          <div className="section-title">Leave</div>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label>Days taken</label>
+            <input type="number" min="0" value={adj.leave_days||''} onChange={e=>u('leave_days',e.target.value)} placeholder="0" />
+          </div>
+          {leaveBal!=null&&<div style={{fontSize:12,marginBottom:4}}>
+            Balance: <strong style={{color:leaveBal.remaining_days>0?'var(--success)':'var(--danger)'}}>{leaveBal.remaining_days} days</strong>
+          </div>}
+          {Number(adj.leave_days||0)>0&&leaveBal!=null&&(()=>{
+            const d=Number(adj.leave_days);
+            const covered=Math.min(leaveBal.remaining_days,d);
+            const fromSal=d-covered;
+            return <div style={{fontSize:12,color:'var(--ink-light)'}}>
+              {covered>0&&<div style={{color:'var(--success)'}}>{covered}d from balance ✓</div>}
+              {fromSal>0&&<div style={{color:'var(--danger)'}}>{fromSal}d deducted: EGP {fmt(fromSal*daily)}</div>}
+            </div>;
+          })()}
+        </div>
+
+        {/* Incentive */}
+        <div className="adj-section">
+          <div className="section-title">Incentive</div>
+          <div className="form-group">
+            <label>Amount (EGP)</label>
+            <input type="number" min="0" value={adj.incentive||''} onChange={e=>u('incentive',e.target.value)} placeholder="0" />
+          </div>
+        </div>
+
+        {/* Variable Allowance */}
+        <div className="adj-section">
+          <div className="section-title">Variable Allowance</div>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label>Amount (EGP)</label>
+            <input type="number" min="0" value={adj.variable_allowance||''} onChange={e=>u('variable_allowance',e.target.value)} placeholder="0" />
+          </div>
+          <div className="form-group">
+            <label>Note</label>
+            <input value={adj.variable_allowance_note||''} onChange={e=>u('variable_allowance_note',e.target.value)} placeholder="Note" />
+          </div>
+        </div>
+
+        {/* Penalty */}
+        <div className="adj-section">
+          <div className="section-title">Penalty</div>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label>Type</label>
+            <select value={adj.penalty_type_id||''} onChange={e=>{
+              const t=penaltyTypes.find(p=>p.id===e.target.value);
+              u('penalty_type_id',e.target.value);
+              if(t?.default_amount) onChange({...adj,penalty_type_id:e.target.value,penalty_amount:t.default_amount,penalty_reason:t.name});
+            }}>
+              <option value="">Select type…</option>
+              {penaltyTypes.map(p=><option key={p.id} value={p.id}>{p.name}{p.default_amount?` (EGP ${fmt(p.default_amount)})`:''}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{marginBottom:6}}>
+            <label>Amount (EGP)</label>
+            <input type="number" min="0" value={adj.penalty_amount||''} onChange={e=>u('penalty_amount',e.target.value)} placeholder="0" />
+          </div>
+        </div>
+
+        {/* Loan */}
+        <div className="adj-section">
+          <div className="section-title">Loan Deduction</div>
+          {loans.length===0
+            ?<div style={{fontSize:12,color:'var(--ink-light)'}}>No active loans</div>
+            :<><div className="form-group" style={{marginBottom:6}}>
+              <label>Loan</label>
+              <select value={adj.loan_id||''} onChange={e=>{
+                const l=loans.find(x=>x.id===e.target.value);
+                onChange({...adj,loan_id:e.target.value,loan_deduction:l?l.monthly_deduction:''});
+              }}>
+                <option value="">None</option>
+                {loans.map(l=><option key={l.id} value={l.id}>{l.reason||'Loan'} — Rem: EGP {fmt(l.remaining_balance)}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Deduction Amount (EGP)</label>
+              <input type="number" min="0" value={adj.loan_deduction||''} onChange={e=>u('loan_deduction',e.target.value)} placeholder="0" />
+            </div></>}
+        </div>
+
+        {/* Advance */}
+        <div className="adj-section">
+          <div className="section-title">Advance</div>
+          <div className="form-group">
+            <label>Amount (EGP)</label>
+            <input type="number" min="0" value={adj.advance||''} onChange={e=>u('advance',e.target.value)} placeholder="0" />
+          </div>
+        </div>
+
       </div>
-
-      {preview && (
-        <>
-          <div className="stats mb-24">
-            <div className="stat accent">
-              <div className="stat-label">Employees</div>
-              <div className="stat-value">{preview.length}</div>
-            </div>
-            <div className="stat gold">
-              <div className="stat-label">Total Dispensed Net</div>
-              <div className="stat-value" style={{ fontSize:18 }}>EGP {fmt(totals.dispensed_net)}</div>
-            </div>
-            <div className="stat">
-              <div className="stat-label">Total Gross</div>
-              <div className="stat-value" style={{ fontSize:18 }}>EGP {fmt(totals.dispensed_gross)}</div>
-            </div>
-            <div className="stat">
-              <div className="stat-label">Total Employer Cost</div>
-              <div className="stat-value" style={{ fontSize:18 }}>EGP {fmt(totals.total_employer_cost)}</div>
-            </div>
-          </div>
-
-          <div className="card mb-24">
-            <div className="card-header">
-              <div className="card-title">Payroll Preview — {monthLabel(month)}</div>
-              <div className="flex">
-                <div className="alert alert-info" style={{ margin:0, padding:'6px 12px' }}>Review before finalizing</div>
-                <button className="btn btn-gold" onClick={finalize} disabled={saving}>
-                  {saving ? <><span className="spinner"></span> Saving…</> : '✔ Finalize & Save'}
-                </button>
-              </div>
-            </div>
-            <div className="tbl-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Employee</th><th>Department</th><th>Pro-Rata</th>
-                    <th className="tbl-num">Full Gross</th>
-                    <th className="tbl-num">Emp SI</th>
-                    <th className="tbl-num">Tax</th>
-                    <th className="tbl-num">Disp. Gross</th>
-                    <th className="tbl-num">Disp. Deductions</th>
-                    <th className="tbl-num" style={{ color:'var(--success)' }}>Dispensed Net ★</th>
-                    <th className="tbl-num">Employer Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.map(l => (
-                    <tr key={l.employee_id}>
-                      <td style={{ fontWeight:500 }}>{l.name}</td>
-                      <td className="text-muted">{l.department || '—'}</td>
-                      <td>
-                        {l.pro_rata_factor < 1
-                          ? <span className="pro-rata-badge">{fmtPct(l.pro_rata_factor)}</span>
-                          : <span style={{ color:'var(--ink-light)', fontSize:12 }}>Full</span>}
-                      </td>
-                      <td className="tbl-num">{fmt(l.gross_full)}</td>
-                      <td className="tbl-num">{fmt(l.emp_si)}</td>
-                      <td className="tbl-num">{fmt(l.monthly_tax)}</td>
-                      <td className="tbl-num">{fmt(l.dispensed_gross)}</td>
-                      <td className="tbl-num">{fmt(l.dispensed_deductions)}</td>
-                      <td className="tbl-num text-success">{fmt(l.dispensed_net)}</td>
-                      <td className="tbl-num">{fmt(l.total_employer_cost)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="tbl-total">
-                    <td colSpan={3}>TOTALS</td>
-                    <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.gross_full,0))}</td>
-                    <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.emp_si,0))}</td>
-                    <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.monthly_tax,0))}</td>
-                    <td className="tbl-num">{fmt(totals.dispensed_gross)}</td>
-                    <td className="tbl-num">{fmt(totals.dispensed_emp_si + totals.dispensed_tax)}</td>
-                    <td className="tbl-num text-success">{fmt(totals.dispensed_net)}</td>
-                    <td className="tbl-num">{fmt(totals.total_employer_cost)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        </>
-      )}
-    </>
+    </div>
   );
 }
 
-// ── HISTORY TAB ───────────────────────────────────────────────────────────────
+function RunPayrollTab({ onRunCreated }) {
+  const [month,setMonth]=useState(today().slice(0,7));
+  const [closing,setClosing]=useState(today());
+  const [employees,setEmployees]=useState([]);
+  const [loans,setLoans]=useState([]);
+  const [leaveBalances,setLeaveBalances]=useState([]);
+  const [fixedAllowances,setFixedAllowances]=useState([]);
+  const [penaltyTypes,setPenaltyTypes]=useState([]);
+  const [adjs,setAdjs]=useState({});
+  const [expandedEmp,setExpandedEmp]=useState(null);
+  const [preview,setPreview]=useState(null);
+  const [calculating,setCalculating]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [msg,setMsg]=useState(null);
+
+  const calculate=async()=>{
+    setCalculating(true);setMsg(null);setPreview(null);
+    const year=new Date(closing).getFullYear();
+    const [{data:emps},{data:ls},{data:lbs},{data:fa},{data:pt}]=await Promise.all([
+      sb.from('employees').select('*').eq('status','active'),
+      sb.from('loans').select('*').eq('status','active'),
+      sb.from('leave_balances').select('*').eq('year',year),
+      sb.from('allowances').select('*').eq('active',true).eq('type','fixed'),
+      sb.from('penalty_types').select('*').order('name'),
+    ]);
+    if(!emps||emps.length===0){setMsg({type:'danger',text:'No active employees.'});setCalculating(false);return;}
+    setEmployees(emps);setLoans(ls||[]);setLeaveBalances(lbs||[]);setFixedAllowances(fa||[]);setPenaltyTypes(pt||[]);
+    // init adjs from active loans
+    const initAdjs={};
+    emps.forEach(emp=>{
+      const empLoans=(ls||[]).filter(l=>l.employee_id===emp.id);
+      const firstLoan=empLoans[0];
+      initAdjs[emp.id]={
+        ...(adjs[emp.id]||{}),
+        loan_id:firstLoan?.id||'',
+        loan_deduction:firstLoan?.monthly_deduction||'',
+      };
+    });
+    setAdjs(p=>({...initAdjs,...p}));
+    const lines=emps.map(emp=>{
+      const empAdj=initAdjs[emp.id]||{};
+      const empAllowances=(fa||[]).filter(a=>a.employee_id===emp.id);
+      const leaveBal=(lbs||[]).find(b=>b.employee_id===emp.id)||null;
+      return calcEmployee(emp,closing,empAdj,empAllowances,leaveBal);
+    });
+    setPreview(lines);setCalculating(false);
+  };
+
+  const recalcLine=(empId)=>{
+    if(!preview) return;
+    const emp=employees.find(e=>e.id===empId);
+    const empAdj=adjs[empId]||{};
+    const empAllowances=fixedAllowances.filter(a=>a.employee_id===empId);
+    const leaveBal=leaveBalances.find(b=>b.employee_id===empId)||null;
+    const newLine=calcEmployee(emp,closing,empAdj,empAllowances,leaveBal);
+    setPreview(p=>p.map(l=>l.employee_id===empId?newLine:l));
+  };
+
+  const updateAdj=(empId,newAdj)=>{
+    setAdjs(p=>({...p,[empId]:newAdj}));
+    // debounce recalc
+    setTimeout(()=>recalcLine(empId),50);
+  };
+
+  const finalize=async()=>{
+    if(!preview) return;
+    setSaving(true);
+    const {data:run,error}=await sb.from('payroll_runs').insert({month,closing_date:closing,status:'draft'}).select().single();
+    if(error){setMsg({type:'danger',text:'Failed: '+error.message});setSaving(false);return;}
+
+    const inserts=preview.map(l=>({
+      run_id:run.id, employee_id:l.employee_id,
+      pro_rata_factor:l.pro_rata_factor,
+      gross_full:l.gross_full, si_base:l.si_base, emp_si:l.emp_si, er_si:l.er_si,
+      annual_taxable:l.annual_taxable, monthly_tax:l.monthly_tax,
+      fixed_allowances:l.fixed_allowances, variable_allowance:l.variable_allowance,
+      incentive:l.incentive, ot_hours:l.ot_hours, ot_rate:l.ot_rate, ot_value:l.ot_value,
+      late_days:l.late_days, late_hours:l.late_hours, late_value:l.late_value,
+      leave_days:l.leave_days, leave_from_balance:l.leave_from_balance,
+      leave_from_salary:l.leave_from_salary, leave_deduction:l.leave_deduction,
+      penalty:l.penalty, penalty_reason:l.penalty_reason,
+      loan_deduction:l.loan_deduction, advance:l.advance,
+      total_earnings:l.total_earnings, total_deductions:l.total_deductions,
+      net_full:l.net_full,
+      dispensed_gross:l.dispensed_gross, dispensed_allowances:l.dispensed_allowances,
+      dispensed_ot:l.dispensed_ot, dispensed_emp_si:l.dispensed_emp_si,
+      dispensed_tax:l.dispensed_tax, dispensed_late:l.dispensed_late,
+      dispensed_leave_ded:l.dispensed_leave_ded, dispensed_penalty:l.dispensed_penalty,
+      dispensed_loan:l.dispensed_loan, dispensed_advance:l.dispensed_advance,
+      dispensed_total_earn:l.dispensed_total_earn, dispensed_total_ded:l.dispensed_total_ded,
+      dispensed_net:l.dispensed_net, dispensed_er_si:l.dispensed_er_si,
+      total_employer_cost:l.total_employer_cost,
+    }));
+    await sb.from('payroll_lines').insert(inserts);
+
+    // update leave balances
+    for (const l of preview) {
+      if (l.leave_from_balance > 0) {
+        const bal = leaveBalances.find(b=>b.employee_id===l.employee_id);
+        if (bal) {
+          const newUsed = bal.used_days + l.leave_from_balance;
+          const newRem  = bal.annual_entitlement - newUsed;
+          await sb.from('leave_balances').update({used_days:newUsed,remaining_days:newRem}).eq('id',bal.id);
+        }
+      }
+      // update loan remaining balance
+      if (l.loan_deduction > 0 && adjs[l.employee_id]?.loan_id) {
+        const loan = loans.find(ln=>ln.id===adjs[l.employee_id].loan_id);
+        if (loan) {
+          const newRem = Math.max(0, loan.remaining_balance - l.loan_deduction);
+          const newStatus = newRem <= 0 ? 'settled' : 'active';
+          await sb.from('loans').update({remaining_balance:newRem,status:newStatus}).eq('id',loan.id);
+        }
+      }
+    }
+
+    await sb.from('payroll_runs').update({status:'finalized'}).eq('id',run.id);
+    setMsg({type:'success',text:'Payroll finalized and saved.'});
+    setPreview(null);setSaving(false);
+    if(onRunCreated) onRunCreated();
+  };
+
+  const totals=useMemo(()=>preview?{
+    earn: preview.reduce((s,l)=>s+l.dispensed_total_earn,0),
+    ded:  preview.reduce((s,l)=>s+l.dispensed_total_ded,0),
+    net:  preview.reduce((s,l)=>s+l.dispensed_net,0),
+    cost: preview.reduce((s,l)=>s+l.total_employer_cost,0),
+  }:null,[preview]);
+
+  return (<>
+    {msg&&<div className={`alert alert-${msg.type}`}>{msg.text}</div>}
+    <div className="card mb-24">
+      <div className="card-header"><div className="card-title">Payroll Parameters</div></div>
+      <div className="card-body">
+        <div className="form-grid-3">
+          <div className="form-group"><label>Payroll Month</label><input type="month" value={month} onChange={e=>setMonth(e.target.value)} /></div>
+          <div className="form-group"><label>Month Closing Date</label><input type="date" value={closing} onChange={e=>setClosing(e.target.value)} /></div>
+          <div className="form-group" style={{justifyContent:'flex-end'}}><label>&nbsp;</label>
+            <button className="btn btn-primary" onClick={calculate} disabled={calculating}>{calculating?<><span className="spinner"></span> Calculating…</>:'⚡ Calculate Payroll'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {preview&&<>
+      <div className="stats mb-24">
+        <div className="stat accent"><div className="stat-label">Employees</div><div className="stat-value">{preview.length}</div></div>
+        <div className="stat gold"><div className="stat-label">Dispensed Net</div><div className="stat-value" style={{fontSize:16}}>EGP {fmt(totals.net)}</div></div>
+        <div className="stat"><div className="stat-label">Total Earnings</div><div className="stat-value" style={{fontSize:16}}>EGP {fmt(totals.earn)}</div></div>
+        <div className="stat"><div className="stat-label">Employer Cost</div><div className="stat-value" style={{fontSize:16}}>EGP {fmt(totals.cost)}</div></div>
+      </div>
+
+      <div className="card mb-24">
+        <div className="card-header">
+          <div className="card-title">Payroll Preview — {mLabel(month)}</div>
+          <div className="flex">
+            <div className="alert alert-info" style={{margin:0,padding:'5px 10px',fontSize:12}}>Expand each employee to adjust OT, leave, penalties…</div>
+            <button className="btn btn-gold" onClick={finalize} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'✔ Finalize & Save'}</button>
+          </div>
+        </div>
+        <div className="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Employee</th><th>Pro-Rata</th>
+              <th className="tbl-num">Gross</th>
+              <th className="tbl-num">Allow+OT</th>
+              <th className="tbl-num">SI+Tax</th>
+              <th className="tbl-num">Deductions</th>
+              <th className="tbl-num" style={{color:'var(--success)'}}>Dispensed Net ★</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+              {preview.map(l=>{
+                const emp=employees.find(e=>e.id===l.employee_id);
+                const empLoans=loans.filter(ln=>ln.employee_id===l.employee_id&&ln.status==='active');
+                const leaveBal=leaveBalances.find(b=>b.employee_id===l.employee_id)||null;
+                const isExpanded=expandedEmp===l.employee_id;
+                return [
+                  <tr key={l.employee_id} style={{background:isExpanded?'var(--maroon-faint)':''}}>
+                    <td>
+                      <div style={{fontWeight:600}}>{l.name}</div>
+                      <div style={{fontSize:11,color:'var(--ink-light)'}}>{l.emp_code} · {l.department}</div>
+                    </td>
+                    <td>{l.pro_rata_factor<1?<span className="pro-rata-badge">{fmtPct(l.pro_rata_factor)}</span>:<span className="text-muted" style={{fontSize:12}}>Full</span>}</td>
+                    <td className="tbl-num">{fmt(l.dispensed_gross)}</td>
+                    <td className="tbl-num" style={{color:l.dispensed_allowances+l.dispensed_ot>0?'var(--success)':'var(--ink-light)'}}>
+                      {fmt(l.dispensed_allowances+l.dispensed_ot)}
+                    </td>
+                    <td className="tbl-num text-danger">{fmt(l.dispensed_emp_si+l.dispensed_tax)}</td>
+                    <td className="tbl-num text-danger">{fmt(l.dispensed_total_ded)}</td>
+                    <td className="tbl-num text-success">{fmt(l.dispensed_net)}</td>
+                    <td>
+                      <button className="btn btn-secondary btn-sm" onClick={()=>setExpandedEmp(isExpanded?null:l.employee_id)}>
+                        {isExpanded?'▲ Close':'▼ Adjust'}
+                      </button>
+                    </td>
+                  </tr>,
+                  isExpanded&&<tr key={l.employee_id+'-adj'}>
+                    <td colSpan={8} style={{padding:'0 12px 12px'}}>
+                      <AdjPanel emp={emp} adj={adjs[l.employee_id]||{}} onChange={a=>updateAdj(l.employee_id,a)}
+                        loans={empLoans} penaltyTypes={penaltyTypes} leaveBal={leaveBal} />
+                    </td>
+                  </tr>
+                ];
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="tbl-total">
+                <td colSpan={2}>TOTALS</td>
+                <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.dispensed_gross,0))}</td>
+                <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.dispensed_allowances+l.dispensed_ot,0))}</td>
+                <td className="tbl-num">{fmt(preview.reduce((s,l)=>s+l.dispensed_emp_si+l.dispensed_tax,0))}</td>
+                <td className="tbl-num">{fmt(totals.ded)}</td>
+                <td className="tbl-num">{fmt(totals.net)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </>}
+  </>);
+}
+
+// ── HISTORY + REGISTER ────────────────────────────────────────────────────────
 function HistoryTab({ onViewRun }) {
-  const [runs, setRuns] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
+  const [runs,setRuns]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    (async()=>{
       setLoading(true);
-      const { data } = await sb.from('payroll_runs').select('*').order('closing_date', { ascending: false });
-      setRuns(data || []);
-      setLoading(false);
+      const {data}=await sb.from('payroll_runs').select('*').order('closing_date',{ascending:false});
+      setRuns(data||[]);setLoading(false);
     })();
-  }, []);
-
+  },[]);
   return (
     <div className="card">
       <div className="card-header"><div className="card-title">Payroll History</div></div>
-      {loading ? <div className="empty"><div className="empty-text">Loading…</div></div> :
-      runs.length === 0 ? <div className="empty"><div className="empty-icon">📋</div><div className="empty-text">No payroll runs yet.</div></div> :
+      {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+      runs.length===0?<div className="empty"><div className="empty-icon">📋</div><div className="empty-text">No payroll runs yet.</div></div>:
       <div className="tbl-wrap">
         <table>
           <thead><tr><th>Month</th><th>Closing Date</th><th>Status</th><th>Created</th><th></th></tr></thead>
           <tbody>
-            {runs.map(r => (
+            {runs.map(r=>(
               <tr key={r.id}>
-                <td style={{ fontWeight:500 }}>{monthLabel(r.month)}</td>
+                <td style={{fontWeight:500}}>{mLabel(r.month)}</td>
                 <td>{r.closing_date}</td>
                 <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
                 <td className="text-muted">{new Date(r.created_at).toLocaleDateString('en-EG')}</td>
-                <td><button className="btn btn-secondary btn-sm" onClick={() => onViewRun(r)}>View Register</button></td>
+                <td><button className="btn btn-secondary btn-sm" onClick={()=>onViewRun(r)}>View Register</button></td>
               </tr>
             ))}
           </tbody>
@@ -976,196 +1511,179 @@ function HistoryTab({ onViewRun }) {
   );
 }
 
-// ── REGISTER VIEW ─────────────────────────────────────────────────────────────
 function RegisterView({ run, onBack, onViewPayslip }) {
-  const [lines, setLines] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
+  const [lines,setLines]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    (async()=>{
       setLoading(true);
-      const { data } = await sb.from('payroll_lines')
-        .select('*, employees(full_name, department, job_title, hire_date, national_id, bank_name, account_number)')
-        .eq('run_id', run.id)
-        .order('employees(full_name)');
-      setLines(data || []);
-      setLoading(false);
+      const {data}=await sb.from('payroll_lines')
+        .select('*, employees(full_name,emp_code,department,job_title,hire_date,national_id,bank_name,account_number)')
+        .eq('run_id',run.id).order('employees(full_name)');
+      setLines(data||[]);setLoading(false);
     })();
-  }, [run.id]);
+  },[run.id]);
 
-  const exportCSV = () => {
-    const headers = ['Name','Department','Pro-Rata','Full Gross','Emp SI','Monthly Tax','Total Ded.','Disp. Gross','Disp. Emp SI','Disp. Tax','Disp. Ded.','Dispensed Net','Disp. Employer SI','Total Employer Cost'];
-    const rows = lines.map(l => [
-      l.employees?.full_name, l.employees?.department, fmtPct(l.pro_rata_factor),
-      l.gross_full, l.emp_si, l.monthly_tax, l.total_deductions,
-      l.dispensed_gross, l.dispensed_emp_si, l.dispensed_tax, l.dispensed_deductions,
-      l.dispensed_net, l.dispensed_er_si, l.total_employer_cost
+  const exportCSV=()=>{
+    const h=['Emp Code','Name','Dept','Pro-Rata','Gross','Allow+OT','SI','Tax','Late','Leave Ded','Penalty','Loan','Advance','Total Earn','Total Ded','Dispensed Net','Employer SI','Employer Cost'];
+    const rows=lines.map(l=>[
+      l.employees?.emp_code,l.employees?.full_name,l.employees?.department,
+      fmtPct(l.pro_rata_factor),
+      l.dispensed_gross,Number(l.dispensed_allowances||0)+Number(l.dispensed_ot||0),
+      l.dispensed_emp_si,l.dispensed_tax,l.dispensed_late,l.dispensed_leave_ded,
+      l.dispensed_penalty,l.dispensed_loan,l.dispensed_advance,
+      l.dispensed_total_earn,l.dispensed_total_ded,l.dispensed_net,
+      l.dispensed_er_si,l.total_employer_cost
     ]);
-    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
-    const a = document.createElement('a');
-    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-    a.download = `Eterna_Payroll_${run.month}.csv`;
-    a.click();
+    downloadCSV(h,rows,`Eterna_Payroll_${run.month}.csv`);
   };
 
-  const totals = lines.reduce((s, l) => ({
-    dispensed_gross: s.dispensed_gross + (l.dispensed_gross||0),
-    dispensed_net: s.dispensed_net + (l.dispensed_net||0),
-    total_employer_cost: s.total_employer_cost + (l.total_employer_cost||0),
-    dispensed_deductions: s.dispensed_deductions + (l.dispensed_deductions||0),
-  }), { dispensed_gross:0, dispensed_net:0, total_employer_cost:0, dispensed_deductions:0 });
+  const totals=lines.reduce((s,l)=>({
+    earn:s.earn+(l.dispensed_total_earn||0),
+    ded:s.ded+(l.dispensed_total_ded||0),
+    net:s.net+(l.dispensed_net||0),
+    cost:s.cost+(l.total_employer_cost||0),
+  }),{earn:0,ded:0,net:0,cost:0});
 
-  return (
-    <>
-      <div className="flex mb-24">
-        <button className="btn btn-secondary" onClick={onBack}>← Back to History</button>
-        <div style={{ fontWeight:600, fontSize:16 }}>Register — {monthLabel(run.month)}</div>
-        <span className={`badge badge-${run.status}`}>{run.status}</span>
-        <button className="btn btn-secondary btn-sm" onClick={exportCSV}>⬇ Export CSV</button>
-      </div>
-
-      <div className="stats mb-24">
-        <div className="stat accent"><div className="stat-label">Employees</div><div className="stat-value">{lines.length}</div></div>
-        <div className="stat gold"><div className="stat-label">Dispensed Net</div><div className="stat-value" style={{fontSize:17}}>EGP {fmt(totals.dispensed_net)}</div></div>
-        <div className="stat"><div className="stat-label">Dispensed Gross</div><div className="stat-value" style={{fontSize:17}}>EGP {fmt(totals.dispensed_gross)}</div></div>
-        <div className="stat"><div className="stat-label">Total Employer Cost</div><div className="stat-value" style={{fontSize:17}}>EGP {fmt(totals.total_employer_cost)}</div></div>
-      </div>
-
-      <div className="card">
-        <div className="tbl-wrap">
-          {loading ? <div className="empty"><div className="empty-text">Loading…</div></div> :
-          <table>
-            <thead>
-              <tr>
-                <th>Employee</th><th>Dept</th><th>Pro-Rata</th>
-                <th className="tbl-num">Disp. Gross</th>
-                <th className="tbl-num">Emp SI</th>
-                <th className="tbl-num">Tax</th>
-                <th className="tbl-num">Disp. Ded.</th>
-                <th className="tbl-num" style={{color:'var(--success)'}}>Dispensed Net ★</th>
-                <th className="tbl-num">Employer Cost</th>
-                <th></th>
+  return (<>
+    <div className="flex mb-24">
+      <button className="btn btn-secondary" onClick={onBack}>← Back</button>
+      <div style={{fontWeight:600,fontSize:15}}>Register — {mLabel(run.month)}</div>
+      <span className={`badge badge-${run.status}`}>{run.status}</span>
+      <button className="btn btn-secondary btn-sm" onClick={exportCSV}>⬇ Export CSV</button>
+    </div>
+    <div className="stats mb-24">
+      <div className="stat accent"><div className="stat-label">Employees</div><div className="stat-value">{lines.length}</div></div>
+      <div className="stat gold"><div className="stat-label">Dispensed Net</div><div className="stat-value" style={{fontSize:15}}>EGP {fmt(totals.net)}</div></div>
+      <div className="stat"><div className="stat-label">Total Earnings</div><div className="stat-value" style={{fontSize:15}}>EGP {fmt(totals.earn)}</div></div>
+      <div className="stat"><div className="stat-label">Employer Cost</div><div className="stat-value" style={{fontSize:15}}>EGP {fmt(totals.cost)}</div></div>
+    </div>
+    <div className="card">
+      <div className="tbl-wrap">
+        {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+        <table>
+          <thead><tr>
+            <th>Employee</th><th>Pro-Rata</th>
+            <th className="tbl-num">Gross</th><th className="tbl-num">Allow+OT</th>
+            <th className="tbl-num">SI</th><th className="tbl-num">Tax</th>
+            <th className="tbl-num">Late</th><th className="tbl-num">Leave</th>
+            <th className="tbl-num">Penalty</th><th className="tbl-num">Loan</th>
+            <th className="tbl-num text-success">Net ★</th>
+            <th className="tbl-num">Er. Cost</th><th></th>
+          </tr></thead>
+          <tbody>
+            {lines.map(l=>(
+              <tr key={l.id}>
+                <td><div style={{fontWeight:500}}>{l.employees?.full_name}</div><div style={{fontSize:11,color:'var(--ink-light)'}}>{l.employees?.emp_code}</div></td>
+                <td>{l.pro_rata_factor<1?<span className="pro-rata-badge">{fmtPct(l.pro_rata_factor)}</span>:<span className="text-muted" style={{fontSize:11}}>Full</span>}</td>
+                <td className="tbl-num">{fmt(l.dispensed_gross)}</td>
+                <td className="tbl-num">{fmt((l.dispensed_allowances||0)+(l.dispensed_ot||0))}</td>
+                <td className="tbl-num">{fmt(l.dispensed_emp_si)}</td>
+                <td className="tbl-num">{fmt(l.dispensed_tax)}</td>
+                <td className="tbl-num">{fmt(l.dispensed_late)}</td>
+                <td className="tbl-num">{fmt(l.dispensed_leave_ded)}</td>
+                <td className="tbl-num">{fmt(l.dispensed_penalty)}</td>
+                <td className="tbl-num">{fmt(l.dispensed_loan)}</td>
+                <td className="tbl-num text-success">{fmt(l.dispensed_net)}</td>
+                <td className="tbl-num">{fmt(l.total_employer_cost)}</td>
+                <td><button className="btn btn-secondary btn-sm" onClick={()=>onViewPayslip({line:l,run})}>Payslip</button></td>
               </tr>
-            </thead>
-            <tbody>
-              {lines.map(l => (
-                <tr key={l.id}>
-                  <td style={{fontWeight:500}}>{l.employees?.full_name}</td>
-                  <td className="text-muted">{l.employees?.department||'—'}</td>
-                  <td>{l.pro_rata_factor < 1 ? <span className="pro-rata-badge">{fmtPct(l.pro_rata_factor)}</span> : <span className="text-muted" style={{fontSize:12}}>Full</span>}</td>
-                  <td className="tbl-num">{fmt(l.dispensed_gross)}</td>
-                  <td className="tbl-num">{fmt(l.dispensed_emp_si)}</td>
-                  <td className="tbl-num">{fmt(l.dispensed_tax)}</td>
-                  <td className="tbl-num">{fmt(l.dispensed_deductions)}</td>
-                  <td className="tbl-num text-success">{fmt(l.dispensed_net)}</td>
-                  <td className="tbl-num">{fmt(l.total_employer_cost)}</td>
-                  <td><button className="btn btn-secondary btn-sm" onClick={() => onViewPayslip({ line: l, run })}>Payslip</button></td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="tbl-total">
-                <td colSpan={3}>TOTALS</td>
-                <td className="tbl-num">{fmt(totals.dispensed_gross)}</td>
-                <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_emp_si||0),0))}</td>
-                <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_tax||0),0))}</td>
-                <td className="tbl-num">{fmt(totals.dispensed_deductions)}</td>
-                <td className="tbl-num text-success">{fmt(totals.dispensed_net)}</td>
-                <td className="tbl-num">{fmt(totals.total_employer_cost)}</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>}
-        </div>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="tbl-total">
+              <td colSpan={2}>TOTALS</td>
+              <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_gross||0),0))}</td>
+              <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_allowances||0)+(l.dispensed_ot||0),0))}</td>
+              <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_emp_si||0),0))}</td>
+              <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_tax||0),0))}</td>
+              <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_late||0),0))}</td>
+              <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_leave_ded||0),0))}</td>
+              <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_penalty||0),0))}</td>
+              <td className="tbl-num">{fmt(lines.reduce((s,l)=>s+(l.dispensed_loan||0),0))}</td>
+              <td className="tbl-num text-success">{fmt(totals.net)}</td>
+              <td className="tbl-num">{fmt(totals.cost)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>}
       </div>
-    </>
-  );
+    </div>
+  </>);
 }
 
-// ── PAYSLIP VIEW ──────────────────────────────────────────────────────────────
+// ── PAYSLIP ───────────────────────────────────────────────────────────────────
 function PayslipView({ data, onBack }) {
   const { line, run } = data;
   const emp = line.employees || {};
-  const print = () => window.print();
-
   return (
     <div className="payslip-wrap">
       <div className="flex mb-24" style={{justifyContent:'space-between'}}>
         <button className="btn btn-secondary" onClick={onBack}>← Back</button>
-        <button className="btn btn-primary" onClick={print}>🖨 Print / Save PDF</button>
+        <button className="btn btn-primary" onClick={()=>window.print()}>🖨 Print / Save PDF</button>
       </div>
       <div className="payslip">
         <div className="payslip-header">
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
-            <div>
-              <div className="payslip-co">ETERNA</div>
-              <div className="payslip-sub">Developments</div>
-            </div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+            <div><div className="payslip-co">ETERNA</div><div className="payslip-sub">Developments</div></div>
             <div style={{textAlign:'right'}}>
-              <div className="payslip-title">Pay Slip</div>
-              <div className="payslip-month">{monthLabel(run.month)}</div>
+              <div style={{fontSize:16,fontWeight:300,letterSpacing:'.08em',textTransform:'uppercase'}}>Pay Slip</div>
+              <div style={{fontSize:13,color:'rgba(255,255,255,0.75)',marginTop:4}}>{mLabel(run.month)}</div>
             </div>
           </div>
         </div>
-
         <div className="payslip-body">
           <div className="payslip-meta">
             <div className="meta-row"><span className="meta-key">Employee Name</span><span className="meta-val">{emp.full_name}</span></div>
-            <div className="meta-row"><span className="meta-key">National ID</span><span className="meta-val">{emp.national_id || '—'}</span></div>
-            <div className="meta-row"><span className="meta-key">Job Title</span><span className="meta-val">{emp.job_title || '—'}</span></div>
-            <div className="meta-row"><span className="meta-key">Department</span><span className="meta-val">{emp.department || '—'}</span></div>
+            <div className="meta-row"><span className="meta-key">Employee ID</span><span className="meta-val">{emp.emp_code||'—'}</span></div>
+            <div className="meta-row"><span className="meta-key">National ID</span><span className="meta-val">{emp.national_id||'—'}</span></div>
+            <div className="meta-row"><span className="meta-key">Job Title</span><span className="meta-val">{emp.job_title||'—'}</span></div>
+            <div className="meta-row"><span className="meta-key">Department</span><span className="meta-val">{emp.department||'—'}</span></div>
             <div className="meta-row"><span className="meta-key">Hire Date</span><span className="meta-val">{emp.hire_date}</span></div>
+            {emp.bank_name&&<div className="meta-row"><span className="meta-key">Bank</span><span className="meta-val">{emp.bank_name}</span></div>}
+            {emp.account_number&&<div className="meta-row"><span className="meta-key">Account No.</span><span className="meta-val">{emp.account_number}</span></div>}
             <div className="meta-row"><span className="meta-key">Closing Date</span><span className="meta-val">{run.closing_date}</span></div>
-            {emp.bank_name && <div className="meta-row"><span className="meta-key">Bank</span><span className="meta-val">{emp.bank_name}</span></div>}
-            {emp.account_number && <div className="meta-row"><span className="meta-key">Account No.</span><span className="meta-val">{emp.account_number}</span></div>}
-            {line.pro_rata_factor < 1 && (
-              <div className="meta-row"><span className="meta-key">Pro-Rata Factor</span><span className="meta-val" style={{color:'var(--gold)'}}>{fmtPct(line.pro_rata_factor)} (partial month)</span></div>
-            )}
+            {line.pro_rata_factor<1&&<div className="meta-row"><span className="meta-key">Pro-Rata</span><span className="meta-val" style={{color:'var(--gold)'}}>{fmtPct(line.pro_rata_factor)} (partial month)</span></div>}
           </div>
 
-          <div className="payslip-section">
-            <div className="payslip-section-title">Earnings</div>
-            <div className="payslip-line">
-              <span>Gross Salary {line.pro_rata_factor < 1 ? `(${fmtPct(line.pro_rata_factor)} of EGP ${fmt(line.gross_full)})` : ''}</span>
-              <span style={{fontWeight:600}}>EGP {fmt(line.dispensed_gross)}</span>
-            </div>
+          <div className="ps-section">
+            <div className="ps-title">Earnings</div>
+            <div className="ps-line"><span>Basic Gross Salary{line.pro_rata_factor<1?` (${fmtPct(line.pro_rata_factor)} of EGP ${fmt(line.gross_full)})`:''}</span><span style={{fontWeight:600}}>EGP {fmt(line.dispensed_gross)}</span></div>
+            {(line.fixed_allowances||0)+(line.variable_allowance||0)>0&&<div className="ps-line"><span>Allowances</span><span style={{color:'var(--success)'}}>+ EGP {fmt(((line.fixed_allowances||0)+(line.variable_allowance||0))*line.pro_rata_factor)}</span></div>}
+            {(line.incentive||0)>0&&<div className="ps-line"><span>Incentive</span><span style={{color:'var(--success)'}}>+ EGP {fmt((line.incentive||0)*line.pro_rata_factor)}</span></div>}
+            {(line.ot_value||0)>0&&<div className="ps-line"><span>Overtime ({line.ot_hours} hrs × EGP {fmt(line.ot_rate)})</span><span style={{color:'var(--success)'}}>+ EGP {fmt((line.ot_value||0)*line.pro_rata_factor)}</span></div>}
+            <div className="ps-line" style={{fontWeight:600}}><span>Total Earnings</span><span>EGP {fmt(line.dispensed_total_earn)}</span></div>
           </div>
 
-          <div className="payslip-section">
-            <div className="payslip-section-title">Deductions</div>
-            <div className="payslip-line">
-              <span>Social Insurance (Employee 11%)</span>
-              <span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_emp_si)}</span>
-            </div>
-            <div className="payslip-line">
-              <span>Income Tax (Law 7/2024)</span>
-              <span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_tax)}</span>
-            </div>
-            <div className="payslip-line" style={{fontWeight:600}}>
-              <span>Total Deductions</span>
-              <span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_deductions)}</span>
-            </div>
+          <div className="ps-section">
+            <div className="ps-title">Deductions</div>
+            <div className="ps-line"><span>Social Insurance (11%)</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_emp_si)}</span></div>
+            <div className="ps-line"><span>Income Tax (Law 7/2024)</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_tax)}</span></div>
+            {(line.dispensed_late||0)>0&&<div className="ps-line"><span>Lateness ({line.late_days}d {line.late_hours}h)</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_late)}</span></div>}
+            {(line.dispensed_leave_ded||0)>0&&<div className="ps-line"><span>Leave Deduction ({line.leave_from_salary}d)</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_leave_ded)}</span></div>}
+            {(line.dispensed_penalty||0)>0&&<div className="ps-line"><span>Penalty{line.penalty_reason?` — ${line.penalty_reason}`:''}</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_penalty)}</span></div>}
+            {(line.dispensed_loan||0)>0&&<div className="ps-line"><span>Loan Deduction</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_loan)}</span></div>}
+            {(line.dispensed_advance||0)>0&&<div className="ps-line"><span>Advance</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_advance)}</span></div>}
+            <div className="ps-line" style={{fontWeight:600}}><span>Total Deductions</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_total_ded)}</span></div>
           </div>
 
-          <div className="payslip-total">
-            <div className="payslip-total-label">Net Salary to Dispense</div>
-            <div className="payslip-total-value">EGP {fmt(line.dispensed_net)}</div>
+          <div className="ps-total">
+            <div style={{fontWeight:500}}>Net Salary to Dispense</div>
+            <div style={{fontSize:20,fontWeight:700}}>EGP {fmt(line.dispensed_net)}</div>
           </div>
 
-          <div className="payslip-employer">
-            <div style={{fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--ink-light)', marginBottom:8}}>Employer Cost (Confidential)</div>
-            <div className="payslip-line" style={{borderBottom:'1px solid #E8E8E8'}}>
-              <span>Gross Salary</span><span>EGP {fmt(line.dispensed_gross)}</span>
-            </div>
-            <div className="payslip-line" style={{borderBottom:'1px solid #E8E8E8'}}>
-              <span>Employer SI (18.75%)</span><span>EGP {fmt(line.dispensed_er_si)}</span>
-            </div>
-            <div className="payslip-line" style={{fontWeight:700}}>
-              <span>Total Employer Cost</span><span>EGP {fmt(line.total_employer_cost)}</span>
-            </div>
+          {line.leave_days>0&&<div className="ps-leave">
+            Leave: {line.leave_days} day(s) taken · {line.leave_from_balance>0?`${line.leave_from_balance}d from balance`:''}{line.leave_from_salary>0?` · ${line.leave_from_salary}d deducted from salary`:''}
+            {line.leave_bal_after!=null&&` · Remaining balance: ${line.leave_bal_after} days`}
+          </div>}
+
+          <div className="ps-employer">
+            <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--ink-light)',marginBottom:8}}>Employer Cost (Confidential)</div>
+            <div className="ps-line" style={{borderBottom:'1px solid #E8E8E8'}}><span>Gross Salary</span><span>EGP {fmt(line.dispensed_gross)}</span></div>
+            <div className="ps-line" style={{borderBottom:'1px solid #E8E8E8'}}><span>Employer SI (18.75%)</span><span>EGP {fmt(line.dispensed_er_si)}</span></div>
+            <div className="ps-line" style={{fontWeight:700}}><span>Total Employer Cost</span><span>EGP {fmt(line.total_employer_cost)}</span></div>
           </div>
         </div>
-
         <div className="payslip-footer">
           <span>Generated: {new Date().toLocaleDateString('en-EG')}</span>
           <span>CONFIDENTIAL — Eterna Developments</span>
@@ -1175,33 +1693,40 @@ function PayslipView({ data, onBack }) {
   );
 }
 
-// ── APP ROOT ──────────────────────────────────────────────────────────────────
+// ── APP ───────────────────────────────────────────────────────────────────────
 function App() {
-  if (!isConfigured) return <SetupScreen />;
+  const [tab,setTab]=useState('employees');
+  const [historyView,setHistoryView]=useState(null);
+  const [payslipData,setPayslipData]=useState(null);
 
-  const [tab, setTab] = useState('employees');
-  const [historyView, setHistoryView] = useState(null); // null | run obj
-  const [payslipData, setPayslipData] = useState(null);
-
-  const nav = [
-    { id:'employees', icon:'👥', label:'Employees' },
-    { id:'run',       icon:'⚡', label:'Run Payroll' },
-    { id:'history',   icon:'📋', label:'History' },
+  const nav=[
+    {id:'employees',icon:'👥',label:'Employees'},
+    {id:'loans',    icon:'💳',label:'Loans'},
+    {id:'leave',    icon:'🏖️',label:'Leave'},
+    {id:'allowances',icon:'💰',label:'Allowances'},
+    {id:'penalties',icon:'⚠️',label:'Penalty Types'},
+    {id:'run',      icon:'⚡',label:'Run Payroll'},
+    {id:'history',  icon:'📋',label:'History'},
   ];
 
-  const tabLabel = { employees:'Employees', run:'Run Payroll', history: payslipData ? 'Payslip' : historyView ? 'Payroll Register' : 'History' };
+  const topTitle={
+    employees:'Employees',loans:'Loans',leave:'Leave Balances',
+    allowances:'Allowances',penalties:'Penalty Types',
+    run:'Run Payroll',
+    history: payslipData?'Payslip':historyView?'Payroll Register':'History'
+  };
 
-  const showPayslip = (data) => { setPayslipData(data); };
-  const backFromPayslip = () => setPayslipData(null);
-  const backFromRegister = () => { setHistoryView(null); setPayslipData(null); };
-
-  const renderContent = () => {
-    if (payslipData) return <PayslipView data={payslipData} onBack={backFromPayslip} />;
-    if (tab === 'employees') return <EmployeesTab />;
-    if (tab === 'run') return <RunPayrollTab onRunCreated={() => {}} />;
-    if (tab === 'history') {
-      if (historyView) return <RegisterView run={historyView} onBack={backFromRegister} onViewPayslip={showPayslip} />;
-      return <HistoryTab onViewRun={r => setHistoryView(r)} />;
+  const renderContent=()=>{
+    if(payslipData) return <PayslipView data={payslipData} onBack={()=>setPayslipData(null)} />;
+    if(tab==='employees') return <EmployeesTab />;
+    if(tab==='loans')     return <LoansTab />;
+    if(tab==='leave')     return <LeaveTab />;
+    if(tab==='allowances')return <AllowancesTab />;
+    if(tab==='penalties') return <PenaltyTypesTab />;
+    if(tab==='run')       return <RunPayrollTab onRunCreated={()=>{}} />;
+    if(tab==='history') {
+      if(historyView) return <RegisterView run={historyView} onBack={()=>{setHistoryView(null);setPayslipData(null);}} onViewPayslip={d=>{setPayslipData(d);}} />;
+      return <HistoryTab onViewRun={r=>setHistoryView(r)} />;
     }
   };
 
@@ -1213,25 +1738,21 @@ function App() {
           <div className="sub">Payroll System</div>
         </div>
         <div className="nav">
-          {nav.map(n => (
-            <div key={n.id} className={`nav-item ${tab === n.id ? 'active' : ''}`}
-              onClick={() => { setTab(n.id); setHistoryView(null); setPayslipData(null); }}>
-              <span className="nav-icon">{n.icon}</span>
-              <span>{n.label}</span>
+          {nav.map(n=>(
+            <div key={n.id} className={`nav-item${tab===n.id?' active':''}`}
+              onClick={()=>{setTab(n.id);setHistoryView(null);setPayslipData(null);}}>
+              <span className="nav-icon">{n.icon}</span><span>{n.label}</span>
             </div>
           ))}
         </div>
-        <div className="sidebar-footer">Egypt Payroll 2026<br/>Law 7/2024 · NOSI Jan 2026</div>
+        <div className="sidebar-footer">Law 14/2025 · NOSI Jan 2026<br/>Law 7/2024 Income Tax</div>
       </div>
-
       <div className="main">
         <div className="topbar">
-          <div className="topbar-title">{tabLabel[tab]}</div>
+          <div className="topbar-title">{topTitle[tab]}</div>
           <div className="topbar-badge">Eterna Developments</div>
         </div>
-        <div className="content">
-          {renderContent()}
-        </div>
+        <div className="content">{renderContent()}</div>
       </div>
     </div>
   );
@@ -1241,3 +1762,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
 </html>
+
