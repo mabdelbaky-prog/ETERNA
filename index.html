@@ -103,7 +103,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--maroon);box-shadow:0 
 .adj-panel{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px;margin-top:8px;}
 .adj-section{margin-bottom:14px;}
 .adj-section:last-child{margin-bottom:0;}
- 
+
 /* payslip */
 .payslip{background:#fff;max-width:700px;margin:0 auto;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .payslip-header{background:var(--maroon);color:#fff;padding:24px 32px;}
@@ -130,15 +130,18 @@ input:focus,select:focus,textarea:focus{border-color:var(--maroon);box-shadow:0 
 <script type="text/babel">
 const { createClient } = supabase;
 const { useState, useEffect, useCallback, useRef, useMemo } = React;
- 
+
 const SUPABASE_URL = 'https://ejxybzhrklqecbozftij.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqeHliemhya2xxZWNib3pmdGlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NDg4NzUsImV4cCI6MjA5ODIyNDg3NX0.pYxfzQk9OInvfrwObue68dxKJibmjQlhCxNxg5JOROw';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
- 
+const ADMIN_USER = 'Admin';
+async function sha256(msg){const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(msg));return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');}
+function generatePIN(){return String(Math.floor(100000+Math.random()*900000));}
+
 // ── PAYROLL ENGINE ────────────────────────────────────────────────────────────
 const EMP_SI = 0.11, ER_SI = 0.1875, SI_MIN = 2700, SI_MAX = 16700, PERS_EX = 20000;
 const BRACKETS = [{l:40000,r:0},{l:55000,r:.10},{l:70000,r:.15},{l:200000,r:.20},{l:400000,r:.225},{l:Infinity,r:.275}];
- 
+
 function calcTax(t) {
   if (t <= 0) return 0;
   let tax = 0, prev = 0;
@@ -150,12 +153,12 @@ function calcTax(t) {
   }
   return tax;
 }
- 
+
 function netFromAnnualGross(g) {
   const si = Math.min(Math.max(g/12, SI_MIN), SI_MAX) * EMP_SI * 12;
   return g - si - calcTax(Math.max(g - si - PERS_EX, 0));
 }
- 
+
 function grossUp(targetNet) {
   let lo = targetNet * 12, hi = targetNet * 36;
   for (let i = 0; i < 60; i++) {
@@ -164,7 +167,7 @@ function grossUp(targetNet) {
   }
   return (lo + hi) / 2 / 12;
 }
- 
+
 function proRata(hireDate, closingDate) {
   const c = new Date(closingDate), h = new Date(hireDate);
   const ms = new Date(c.getFullYear(), c.getMonth(), 1);
@@ -172,7 +175,7 @@ function proRata(hireDate, closingDate) {
   const dim = new Date(c.getFullYear(), c.getMonth() + 1, 0).getDate();
   return Math.min(1, Math.max(0, (c - h) / 86400000 + 1) / dim);
 }
- 
+
 function leaveEntitlement(hireDateStr, year) {
   const hire = new Date(hireDateStr);
   const jan1 = new Date(year, 0, 1);
@@ -182,7 +185,7 @@ function leaveEntitlement(hireDateStr, year) {
   if (yearsService >= 0.5) return 15;
   return 0;
 }
- 
+
 function calcEmployee(emp, closingDate, adj = {}, fixedAllowances = [], leaveBal = null) {
   const factor   = proRata(emp.hire_date, closingDate);
   const gross    = grossUp(emp.target_net);
@@ -195,17 +198,17 @@ function calcEmployee(emp, closingDate, adj = {}, fixedAllowances = [], leaveBal
   const mTax     = annTax / 12;
   const dailyRate  = gross / 30;
   const hourlyRate = gross / 26 / 8;
- 
+
   // OT
   const otHours = Number(adj.ot_hours || 0);
   const otRate  = adj.ot_rate_custom ? Number(adj.ot_rate_custom) : hourlyRate * 1.35;
   const otValue = otHours * otRate;
- 
+
   // Lateness
   const lateDays  = Number(adj.late_days || 0);
   const lateHours = Number(adj.late_hours || 0);
   const lateValue = lateDays * dailyRate + lateHours * hourlyRate;
- 
+
   // Leave
   const leaveDays = Number(adj.leave_days || 0);
   let leaveDeduction = 0, leaveFromBalance = 0, leaveFromSalary = 0;
@@ -220,7 +223,7 @@ function calcEmployee(emp, closingDate, adj = {}, fixedAllowances = [], leaveBal
       leaveDeduction   = leaveFromSalary * dailyRate;
     }
   }
- 
+
   // Fixed allowances sum
   const fixedAllow = fixedAllowances.reduce((s, a) => s + Number(a.amount), 0);
   const varAllow   = Number(adj.variable_allowance || 0);
@@ -228,11 +231,11 @@ function calcEmployee(emp, closingDate, adj = {}, fixedAllowances = [], leaveBal
   const penalty    = Number(adj.penalty_amount || 0);
   const loanDed    = Number(adj.loan_deduction || 0);
   const advance    = Number(adj.advance || 0);
- 
+
   const totalEarnings  = gross + fixedAllow + varAllow + incentive + otValue;
   const totalDeductions= empSi + mTax + lateValue + leaveDeduction + penalty + loanDed + advance;
   const netFull        = totalEarnings - totalDeductions;
- 
+
   return {
     employee_id: emp.id, emp_code: emp.emp_code,
     name: emp.full_name, department: emp.department, job_title: emp.job_title,
@@ -272,13 +275,13 @@ function calcEmployee(emp, closingDate, adj = {}, fixedAllowances = [], leaveBal
     total_employer_cost:  (gross + erSiAmt) * factor,
   };
 }
- 
+
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 const fmt    = n => n == null ? '—' : Number(n).toLocaleString('en-EG',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtPct = n => (n*100).toFixed(1)+'%';
 const today  = () => new Date().toISOString().slice(0,10);
 const mLabel = s => { if(!s) return ''; const d=new Date(s+'-01'); return d.toLocaleString('en',{month:'long',year:'numeric'}); };
- 
+
 // Employee ID generator: EMP-001 format
 function nextEmpCode(employees) {
   const nums = employees
@@ -289,7 +292,7 @@ function nextEmpCode(employees) {
   const max = nums.length ? Math.max(...nums) : 0;
   return 'EMP-' + String(max + 1).padStart(3, '0');
 }
- 
+
 // ── SHARED COMPONENTS ─────────────────────────────────────────────────────────
 function Field({ label, field, type='text', placeholder='', form, setForm, readOnly=false }) {
   return (
@@ -301,7 +304,7 @@ function Field({ label, field, type='text', placeholder='', form, setForm, readO
     </div>
   );
 }
- 
+
 function Modal({ title, onClose, children, footer, lg }) {
   return (
     <div className="modal-bg" onClick={e => e.target===e.currentTarget&&onClose()}>
@@ -316,7 +319,7 @@ function Modal({ title, onClose, children, footer, lg }) {
     </div>
   );
 }
- 
+
 // ── BULK CSV HELPERS ──────────────────────────────────────────────────────────
 const CSV_HEADERS = ['emp_code','full_name','national_id','department','job_title','hire_date','target_net','status','bank_name','account_number'];
 const SAMPLE_ROWS = [
@@ -324,14 +327,14 @@ const SAMPLE_ROWS = [
   ['EMP-002','Sara Mohamed','30005152345678','Finance','Senior Accountant','2024-06-15','9000','active','CIB','9876543210987654'],
   ['EMP-003','Khaled Ali','19801231345678','Sales','Sales Director','2022-01-10','18000','active','NBE','1122334455667788'],
 ];
- 
+
 function downloadCSV(headers, rows, filename) {
   const csv = [headers, ...rows].map(r => r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
   a.download = filename; a.click();
 }
- 
+
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return { error:'File is empty or has no data rows.' };
@@ -355,7 +358,7 @@ function parseCSV(text) {
   }
   return {headers,rows};
 }
- 
+
 function validateEmpRow(row) {
   const e=[];
   if (!row.full_name) e.push('full_name required');
@@ -364,10 +367,10 @@ function validateEmpRow(row) {
   if (row.status&&!['active','inactive'].includes(row.status)) e.push('status must be active or inactive');
   return e;
 }
- 
+
 // ── EMPLOYEES TAB ─────────────────────────────────────────────────────────────
 const BLANK_EMP = {emp_code:'',full_name:'',national_id:'',department:'',job_title:'',hire_date:'',target_net:'',status:'active',bank_name:'',account_number:''};
- 
+
 function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
   if (!modal) return null;
   return (
@@ -384,8 +387,10 @@ function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
         <Field label="Job Title" field="job_title" placeholder="Sales Manager" form={form} setForm={setForm} />
         <Field label="Hire Date *" field="hire_date" type="date" form={form} setForm={setForm} />
         <Field label="Target Net (EGP/month) *" field="target_net" type="number" placeholder="15000" form={form} setForm={setForm} />
+        <Field label="Email" field="email" type="email" placeholder="ahmed@example.com" form={form} setForm={setForm} />
         <Field label="Bank Name" field="bank_name" placeholder="Banque Misr" form={form} setForm={setForm} />
         <Field label="Account Number" field="account_number" placeholder="1234567890123456" form={form} setForm={setForm} />
+        <div className="form-group"><label>Contract Type</label><select value={form.contract_type||'full-time'} onChange={e=>setForm(p=>({...p,contract_type:e.target.value}))}><option value="full-time">Full-time</option><option value="part-time">Part-time</option><option value="contractor">Contractor</option></select></div>
         <div className="form-group">
           <label>Status</label>
           <select value={form.status||'active'} onChange={e=>setForm(p=>({...p,status:e.target.value}))}>
@@ -397,55 +402,63 @@ function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
     </Modal>
   );
 }
- 
+
 function BulkModal({ onClose, onDone, employees }) {
   const [step,setStep]=useState('idle');
   const [parsed,setParsed]=useState(null);
   const [results,setResults]=useState(null);
   const [dragOver,setDragOver]=useState(false);
   const fileRef=useRef(null);
- 
+
   const handleFile = file => {
     if(!file||!file.name.endsWith('.csv')){alert('Please upload a .csv file.');return;}
     const r=new FileReader();
     r.onload=e=>{const res=parseCSV(e.target.result);if(res.error){alert(res.error);return;}setParsed(res);setStep('preview');};
     r.readAsText(file);
   };
- 
+
   const upload = async () => {
     setStep('uploading');
     const valid=[],invalid=[];
     for (const row of parsed.rows) {
       const errs=validateEmpRow(row);
       if(errs.length){invalid.push({row,errs});continue;}
-      // auto-generate emp_code if not in CSV
       valid.push({
-        emp_code: row.emp_code || null, // will be set after we know max
+        emp_code: row.emp_code || null,
         full_name:row.full_name, national_id:row.national_id||null,
         department:row.department||null, job_title:row.job_title||null,
         hire_date:row.hire_date, target_net:Number(row.target_net),
         status:row.status||'active', bank_name:row.bank_name||null,
-        account_number:row.account_number||null,
+        account_number:row.account_number||null, email:row.email||null,
       });
     }
-    // assign emp_codes to those without
-    const existing = employees.map(e=>e.emp_code).filter(Boolean).map(c=>parseInt(c.replace(/\D/g,''),10)).filter(n=>!isNaN(n));
-    let counter = existing.length ? Math.max(...existing) : 0;
-    valid.forEach(v=>{ if(!v.emp_code) v.emp_code='EMP-'+String(++counter).padStart(3,'0'); });
- 
-    let inserted=0,failed=0;
-    if(valid.length){
-      const {error}=await sb.from('employees').insert(valid);
-      if(error){failed=valid.length;}else inserted=valid.length;
-    }
-    setResults({inserted,skipped:invalid,failed});
+    const byCode={}, byNid={}, byNameDate={};
+    employees.forEach(e=>{
+      if(e.emp_code) byCode[e.emp_code.toUpperCase()]=e;
+      if(e.national_id) byNid[e.national_id]=e;
+      byNameDate[(e.full_name||'').toLowerCase().trim()+'|'+e.hire_date]=e;
+    });
+    const toInsert=[], toUpdate=[];
+    valid.forEach(v=>{
+      const match=(v.emp_code&&byCode[v.emp_code.toUpperCase()])||(v.national_id&&byNid[v.national_id])||byNameDate[(v.full_name||'').toLowerCase().trim()+'|'+v.hire_date];
+      if(match) toUpdate.push({...v,id:match.id,emp_code:v.emp_code||match.emp_code});
+      else toInsert.push(v);
+    });
+    const existingNums=employees.map(e=>e.emp_code).filter(Boolean).map(c=>parseInt(c.replace(/\D/g,''),10)).filter(n=>!isNaN(n));
+    let counter=existingNums.length?Math.max(...existingNums):0;
+    toInsert.forEach(v=>{ if(!v.emp_code) v.emp_code='EMP-'+String(++counter).padStart(3,'0'); });
+
+    let inserted=0, updated=0, failed=0;
+    if(toInsert.length){const{error}=await sb.from('employees').insert(toInsert);if(error)failed+=toInsert.length;else inserted=toInsert.length;}
+    for(const u of toUpdate){const{id,...fields}=u;const{error}=await sb.from('employees').update(fields).eq('id',id);if(error)failed++;else updated++;}
+    setResults({inserted,updated,skipped:invalid,failed});
     setStep('done');
-    if(inserted>0&&onDone) onDone();
+    if((inserted>0||updated>0)&&onDone) onDone();
   };
- 
+
   const validRows  = parsed?parsed.rows.filter(r=>validateEmpRow(r).length===0):[];
   const invalidRows= parsed?parsed.rows.filter(r=>validateEmpRow(r).length>0):[];
- 
+
   return (
     <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal modal-lg">
@@ -495,12 +508,12 @@ function BulkModal({ onClose, onDone, employees }) {
               </div>
             </div>
           </>}
- 
+
           {step==='preview'&&<>
             <div style={{display:'flex',gap:10,marginBottom:14}}>
               <div style={{flex:1,background:'var(--success-bg)',border:'1px solid #B2DFCC',borderRadius:6,padding:'8px 12px',textAlign:'center'}}>
                 <div style={{fontSize:20,fontWeight:700,color:'var(--success)'}}>{validRows.length}</div>
-                <div style={{fontSize:11,color:'var(--success)'}}>Ready to insert</div>
+                <div style={{fontSize:11,color:'var(--success)'}}>Ready (new or updated)</div>
               </div>
               <div style={{flex:1,background:'var(--danger-bg)',border:'1px solid #F5C6C2',borderRadius:6,padding:'8px 12px',textAlign:'center'}}>
                 <div style={{fontSize:20,fontWeight:700,color:'var(--danger)'}}>{invalidRows.length}</div>
@@ -509,10 +522,14 @@ function BulkModal({ onClose, onDone, employees }) {
             </div>
             <div style={{maxHeight:300,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}}>
               <table style={{fontSize:12}}>
-                <thead><tr><th>#</th><th>Code</th><th>Name</th><th>Dept</th><th>Hire Date</th><th>Target Net</th><th>Issues</th></tr></thead>
+                <thead><tr><th>#</th><th>Code</th><th>Name</th><th>Dept</th><th>Hire Date</th><th>Target Net</th><th>Action</th><th>Issues</th></tr></thead>
                 <tbody>
                   {parsed.rows.map(row=>{
                     const errs=validateEmpRow(row);
+                    const byCode=employees.find(e=>e.emp_code&&row.emp_code&&e.emp_code.toUpperCase()===row.emp_code.toUpperCase());
+                    const byNid=employees.find(e=>e.national_id&&row.national_id&&e.national_id===row.national_id);
+                    const byNameDate=employees.find(e=>(e.full_name||'').toLowerCase().trim()===(row.full_name||'').toLowerCase().trim()&&e.hire_date===row.hire_date);
+                    const willUpdate=byCode||byNid||byNameDate;
                     return <tr key={row._line} style={{background:errs.length?'#FFF8F8':''}}>
                       <td style={{color:'var(--ink-light)'}}>{row._line}</td>
                       <td style={{color:'var(--ink-light)'}}>{row.emp_code||<span style={{color:'var(--gold)'}}>auto</span>}</td>
@@ -520,6 +537,7 @@ function BulkModal({ onClose, onDone, employees }) {
                       <td>{row.department||'—'}</td>
                       <td style={{color:/^\d{4}-\d{2}-\d{2}$/.test(row.hire_date)?'inherit':'var(--danger)'}}>{row.hire_date||'—'}</td>
                       <td style={{color:!isNaN(Number(row.target_net))&&row.target_net?'inherit':'var(--danger)'}}>{row.target_net||'—'}</td>
+                      <td>{errs.length?'—':willUpdate?<span style={{color:'var(--info)',fontWeight:600}}>Update</span>:<span style={{color:'var(--success)',fontWeight:600}}>New</span>}</td>
                       <td style={{color:'var(--danger)',fontSize:11}}>{errs.join('; ')||<span style={{color:'var(--success)'}}>✓</span>}</td>
                     </tr>;
                   })}
@@ -528,26 +546,26 @@ function BulkModal({ onClose, onDone, employees }) {
             </div>
             {invalidRows.length>0&&<div className="alert alert-info" style={{marginTop:10,marginBottom:0}}>{invalidRows.length} row(s) with errors will be skipped.</div>}
           </>}
- 
+
           {step==='uploading'&&<div style={{textAlign:'center',padding:'32px 0'}}><div style={{fontSize:32,marginBottom:10}}>⏳</div><div style={{fontWeight:500}}>Inserting employees…</div></div>}
- 
+
           {step==='done'&&results&&<div style={{textAlign:'center',padding:'20px 0'}}>
-            <div style={{fontSize:44,marginBottom:10}}>{results.inserted>0?'✅':'⚠️'}</div>
-            <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>{results.inserted} employee(s) added successfully</div>
+            <div style={{fontSize:44,marginBottom:10}}>{(results.inserted>0||results.updated>0)?'✅':'⚠️'}</div>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>{results.inserted} added · {results.updated||0} updated</div>
             {results.failed>0&&<div style={{color:'var(--danger)'}}>{results.failed} rows failed (database error)</div>}
             {results.skipped.length>0&&<div style={{color:'var(--ink-light)',fontSize:13}}>{results.skipped.length} row(s) skipped due to validation errors</div>}
           </div>}
         </div>
         <div className="modal-footer">
           {step==='idle'&&<button className="btn btn-secondary" onClick={onClose}>Close</button>}
-          {step==='preview'&&<><button className="btn btn-secondary" onClick={()=>setStep('idle')}>← Back</button><button className="btn btn-primary" onClick={upload} disabled={validRows.length===0}>Insert {validRows.length} Employee(s)</button></>}
+          {step==='preview'&&<><button className="btn btn-secondary" onClick={()=>setStep('idle')}>← Back</button><button className="btn btn-primary" onClick={upload} disabled={validRows.length===0}>Save {validRows.length} Employee(s)</button></>}
           {step==='done'&&<button className="btn btn-primary" onClick={onClose}>Done</button>}
         </div>
       </div>
     </div>
   );
 }
- 
+
 // Assign IDs to existing employees who don't have one
 async function assignMissingEmpCodes(employees) {
   const missing = employees.filter(e => !e.emp_code);
@@ -560,7 +578,7 @@ async function assignMissingEmpCodes(employees) {
   }
   return missing.length;
 }
- 
+
 function EmployeesTab() {
   const [employees,setEmployees]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -570,16 +588,16 @@ function EmployeesTab() {
   const [form,setForm]=useState({...BLANK_EMP});
   const [showBulk,setShowBulk]=useState(false);
   const [assigning,setAssigning]=useState(false);
- 
+
   const load = useCallback(async()=>{
     setLoading(true);
     const {data}=await sb.from('employees').select('*').order('emp_code',{nullsFirst:false}).order('full_name');
     setEmployees(data||[]);
     setLoading(false);
   },[]);
- 
+
   useEffect(()=>{load();},[load]);
- 
+
   const openAdd = ()=>{
     const code = nextEmpCode(employees);
     setForm({...BLANK_EMP, emp_code: code});
@@ -587,7 +605,7 @@ function EmployeesTab() {
   };
   const openEdit=(emp)=>{setForm({...emp});setModal(emp);};
   const closeModal=()=>setModal(null);
- 
+
   const save = async()=>{
     if(!form.full_name||!form.hire_date||!form.target_net){alert('Name, hire date, and target net are required.');return;}
     setSaving(true);
@@ -598,12 +616,12 @@ function EmployeesTab() {
     }
     setSaving(false);setModal(null);load();
   };
- 
+
   const toggle=async(emp)=>{
     await sb.from('employees').update({status:emp.status==='active'?'inactive':'active'}).eq('id',emp.id);
     load();
   };
- 
+
   const doAssignCodes = async()=>{
     setAssigning(true);
     const n = await assignMissingEmpCodes(employees);
@@ -611,7 +629,7 @@ function EmployeesTab() {
     if(n>0){alert(`${n} employee(s) assigned new IDs.`);load();}
     else alert('All employees already have IDs.');
   };
- 
+
   const filtered=employees.filter(e=>
     e.full_name.toLowerCase().includes(search.toLowerCase())||
     (e.department||'').toLowerCase().includes(search.toLowerCase())||
@@ -619,7 +637,7 @@ function EmployeesTab() {
   );
   const active=employees.filter(e=>e.status==='active').length;
   const missingCodes=employees.filter(e=>!e.emp_code).length;
- 
+
   return (<>
     {missingCodes>0&&<div className="alert alert-warn mb-24">
       {missingCodes} employee(s) are missing Employee IDs.{' '}
@@ -627,14 +645,14 @@ function EmployeesTab() {
         {assigning?'Assigning…':'Auto-assign IDs now'}
       </button>
     </div>}
- 
+
     <div className="stats">
       <div className="stat accent"><div className="stat-label">Total</div><div className="stat-value">{employees.length}</div></div>
       <div className="stat gold"><div className="stat-label">Active</div><div className="stat-value">{active}</div></div>
       <div className="stat"><div className="stat-label">Inactive</div><div className="stat-value">{employees.length-active}</div></div>
       <div className="stat"><div className="stat-label">Departments</div><div className="stat-value">{[...new Set(employees.map(e=>e.department).filter(Boolean))].length}</div></div>
     </div>
- 
+
     <div className="card">
       <div className="card-header">
         <div className="card-title">Employee Directory</div>
@@ -673,15 +691,15 @@ function EmployeesTab() {
         </table>}
       </div>
     </div>
- 
+
     {showBulk&&<BulkModal onClose={()=>setShowBulk(false)} onDone={load} employees={employees} />}
     <EmpModal modal={modal} form={form} setForm={setForm} saving={saving} onClose={closeModal} onSave={save} />
   </>);
 }
- 
+
 // ── LOANS TAB ─────────────────────────────────────────────────────────────────
 const BLANK_LOAN={employee_id:'',amount:'',reason:'',date_issued:today(),monthly_deduction:'',status:'active'};
- 
+
 function LoansTab() {
   const [loans,setLoans]=useState([]);
   const [employees,setEmployees]=useState([]);
@@ -690,7 +708,7 @@ function LoansTab() {
   const [form,setForm]=useState({...BLANK_LOAN});
   const [saving,setSaving]=useState(false);
   const [filter,setFilter]=useState('active');
- 
+
   const load=useCallback(async()=>{
     setLoading(true);
     const [{data:l},{data:e}]=await Promise.all([
@@ -699,9 +717,9 @@ function LoansTab() {
     ]);
     setLoans(l||[]);setEmployees(e||[]);setLoading(false);
   },[]);
- 
+
   useEffect(()=>{load();},[load]);
- 
+
   const save=async()=>{
     if(!form.employee_id||!form.amount||!form.monthly_deduction){alert('Employee, amount, and monthly deduction are required.');return;}
     setSaving(true);
@@ -718,16 +736,16 @@ function LoansTab() {
     else await sb.from('loans').update(payload).eq('id',modal.id);
     setSaving(false);setModal(null);load();
   };
- 
+
   const settle=async(loan)=>{
     if(!confirm('Mark this loan as settled?')) return;
     await sb.from('loans').update({status:'settled',remaining_balance:0}).eq('id',loan.id);
     load();
   };
- 
+
   const filtered=loans.filter(l=>filter==='all'||l.status===filter);
   const totalOut=loans.filter(l=>l.status==='active').reduce((s,l)=>s+(l.remaining_balance||0),0);
- 
+
   return (<>
     <div className="stats">
       <div className="stat accent"><div className="stat-label">Active Loans</div><div className="stat-value">{loans.filter(l=>l.status==='active').length}</div></div>
@@ -735,7 +753,7 @@ function LoansTab() {
       <div className="stat"><div className="stat-label">Settled</div><div className="stat-value">{loans.filter(l=>l.status==='settled').length}</div></div>
       <div className="stat"><div className="stat-label">Total Loans</div><div className="stat-value">{loans.length}</div></div>
     </div>
- 
+
     <div className="card">
       <div className="card-header">
         <div className="card-title">Loan Register</div>
@@ -773,7 +791,7 @@ function LoansTab() {
         </table>}
       </div>
     </div>
- 
+
     {modal&&<Modal title={modal==='add'?'New Loan':'Edit Loan'} onClose={()=>setModal(null)}
       footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
       <div className="form-grid">
@@ -796,7 +814,7 @@ function LoansTab() {
     </Modal>}
   </>);
 }
- 
+
 // ── LEAVE TAB ─────────────────────────────────────────────────────────────────
 function LeaveTab() {
   const [balances,setBalances]=useState([]);
@@ -806,7 +824,7 @@ function LeaveTab() {
   const [form,setForm]=useState({employee_id:'',year:new Date().getFullYear(),annual_entitlement:'',used_days:0,manual_override:false});
   const [saving,setSaving]=useState(false);
   const year=new Date().getFullYear();
- 
+
   const load=useCallback(async()=>{
     setLoading(true);
     const [{data:b},{data:e}]=await Promise.all([
@@ -815,9 +833,9 @@ function LeaveTab() {
     ]);
     setBalances(b||[]);setEmployees(e||[]);setLoading(false);
   },[year]);
- 
+
   useEffect(()=>{load();},[load]);
- 
+
   const autoInit=async()=>{
     if(!confirm(`Auto-initialize ${year} leave balances for all active employees without one?`)) return;
     const existing=new Set(balances.map(b=>b.employee_id));
@@ -833,7 +851,7 @@ function LeaveTab() {
     alert(`${toCreate.length} balances created.`);
     load();
   };
- 
+
   const save=async()=>{
     setSaving(true);
     const entitlement=Number(form.annual_entitlement);
@@ -843,13 +861,13 @@ function LeaveTab() {
     else await sb.from('leave_balances').update(payload).eq('id',modal.id);
     setSaving(false);setModal(null);load();
   };
- 
+
   const openAdd=(emp)=>{
     const entitlement=leaveEntitlement(emp.hire_date,year);
     setForm({employee_id:emp.id,year,annual_entitlement:entitlement,used_days:0,manual_override:false});
     setModal('add');
   };
- 
+
   return (<>
     <div className="card mb-24">
       <div className="card-header">
@@ -880,7 +898,7 @@ function LeaveTab() {
         </table>}
       </div>
     </div>
- 
+
     <div className="card">
       <div className="card-header"><div className="card-title">Employees Without {year} Balance</div></div>
       <div className="tbl-wrap">
@@ -901,7 +919,7 @@ function LeaveTab() {
           </table>}
       </div>
     </div>
- 
+
     {modal&&<Modal title={modal==='add'?'Add Leave Balance':'Edit Leave Balance'} onClose={()=>setModal(null)}
       footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
       <div className="form-grid">
@@ -928,10 +946,10 @@ function LeaveTab() {
     </Modal>}
   </>);
 }
- 
+
 // ── ALLOWANCES TAB ────────────────────────────────────────────────────────────
 const BLANK_ALLOW={employee_id:'',name:'',amount:'',type:'fixed',active:true};
- 
+
 function AllowancesTab() {
   const [allowances,setAllowances]=useState([]);
   const [employees,setEmployees]=useState([]);
@@ -940,7 +958,7 @@ function AllowancesTab() {
   const [form,setForm]=useState({...BLANK_ALLOW});
   const [saving,setSaving]=useState(false);
   const [filterEmp,setFilterEmp]=useState('');
- 
+
   const load=useCallback(async()=>{
     setLoading(true);
     const [{data:a},{data:e}]=await Promise.all([
@@ -949,9 +967,9 @@ function AllowancesTab() {
     ]);
     setAllowances(a||[]);setEmployees(e||[]);setLoading(false);
   },[]);
- 
+
   useEffect(()=>{load();},[load]);
- 
+
   const save=async()=>{
     if(!form.employee_id||!form.name||!form.amount){alert('Employee, name, and amount are required.');return;}
     setSaving(true);
@@ -960,15 +978,15 @@ function AllowancesTab() {
     else await sb.from('allowances').update(payload).eq('id',modal.id);
     setSaving(false);setModal(null);load();
   };
- 
+
   const toggle=async(a)=>{
     await sb.from('allowances').update({active:!a.active}).eq('id',a.id);
     load();
   };
- 
+
   const filtered=allowances.filter(a=>!filterEmp||a.employee_id===filterEmp);
   const totalFixed=allowances.filter(a=>a.type==='fixed'&&a.active).reduce((s,a)=>s+Number(a.amount),0);
- 
+
   return (<>
     <div className="stats">
       <div className="stat accent"><div className="stat-label">Total Allowances</div><div className="stat-value">{allowances.length}</div></div>
@@ -976,7 +994,7 @@ function AllowancesTab() {
       <div className="stat"><div className="stat-label">Active</div><div className="stat-value">{allowances.filter(a=>a.active).length}</div></div>
       <div className="stat"><div className="stat-label">Inactive</div><div className="stat-value">{allowances.filter(a=>!a.active).length}</div></div>
     </div>
- 
+
     <div className="card">
       <div className="card-header">
         <div className="card-title">Allowances</div>
@@ -1011,7 +1029,7 @@ function AllowancesTab() {
         </table>}
       </div>
     </div>
- 
+
     {modal&&<Modal title={modal==='add'?'Add Allowance':'Edit Allowance'} onClose={()=>setModal(null)}
       footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
       <div className="form-grid">
@@ -1035,7 +1053,7 @@ function AllowancesTab() {
     </Modal>}
   </>);
 }
- 
+
 // ── PENALTY TYPES TAB ─────────────────────────────────────────────────────────
 function PenaltyTypesTab() {
   const [types,setTypes]=useState([]);
@@ -1043,15 +1061,15 @@ function PenaltyTypesTab() {
   const [modal,setModal]=useState(null);
   const [form,setForm]=useState({name:'',description:'',default_amount:''});
   const [saving,setSaving]=useState(false);
- 
+
   const load=useCallback(async()=>{
     setLoading(true);
     const {data}=await sb.from('penalty_types').select('*').order('name');
     setTypes(data||[]);setLoading(false);
   },[]);
- 
+
   useEffect(()=>{load();},[load]);
- 
+
   const save=async()=>{
     if(!form.name){alert('Name is required.');return;}
     setSaving(true);
@@ -1060,13 +1078,13 @@ function PenaltyTypesTab() {
     else await sb.from('penalty_types').update(payload).eq('id',modal.id);
     setSaving(false);setModal(null);load();
   };
- 
+
   const del=async(t)=>{
     if(!confirm('Delete this penalty type?')) return;
     await sb.from('penalty_types').delete().eq('id',t.id);
     load();
   };
- 
+
   return (<>
     <div className="card">
       <div className="card-header">
@@ -1094,7 +1112,7 @@ function PenaltyTypesTab() {
         </table>}
       </div>
     </div>
- 
+
     {modal&&<Modal title={modal==='add'?'Add Penalty Type':'Edit Penalty Type'} onClose={()=>setModal(null)}
       footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
       <div className="form-grid">
@@ -1108,20 +1126,20 @@ function PenaltyTypesTab() {
     </Modal>}
   </>);
 }
- 
+
 // ── RUN PAYROLL TAB ───────────────────────────────────────────────────────────
 function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
   const gross   = grossUp(emp.target_net);
   const hourly  = gross / 26 / 8;
   const daily   = gross / 30;
   const otRate  = hourly * 1.35;
- 
+
   const u = (field, val) => onChange({ ...adj, [field]: val });
- 
+
   return (
     <div className="adj-panel">
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
- 
+
         {/* OT */}
         <div className="adj-section">
           <div className="section-title">Overtime</div>
@@ -1137,7 +1155,7 @@ function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
             Value: EGP {fmt((Number(adj.ot_hours||0)) * (adj.ot_rate_custom?Number(adj.ot_rate_custom):otRate))}
           </div>
         </div>
- 
+
         {/* Lateness */}
         <div className="adj-section">
           <div className="section-title">Lateness</div>
@@ -1153,7 +1171,7 @@ function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
             Deduct: EGP {fmt(Number(adj.late_days||0)*daily + Number(adj.late_hours||0)*hourly)}
           </div>
         </div>
- 
+
         {/* Leave */}
         <div className="adj-section">
           <div className="section-title">Leave</div>
@@ -1174,7 +1192,7 @@ function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
             </div>;
           })()}
         </div>
- 
+
         {/* Incentive */}
         <div className="adj-section">
           <div className="section-title">Incentive</div>
@@ -1183,7 +1201,7 @@ function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
             <input type="number" min="0" value={adj.incentive||''} onChange={e=>u('incentive',e.target.value)} placeholder="0" />
           </div>
         </div>
- 
+
         {/* Variable Allowance */}
         <div className="adj-section">
           <div className="section-title">Variable Allowance</div>
@@ -1196,27 +1214,40 @@ function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
             <input value={adj.variable_allowance_note||''} onChange={e=>u('variable_allowance_note',e.target.value)} placeholder="Note" />
           </div>
         </div>
- 
+
         {/* Penalty */}
         <div className="adj-section">
           <div className="section-title">Penalty</div>
+          <div className="toggle-btn">
+            <div className={`toggle-opt${(adj.penalty_mode||'amount')==='amount'?' active':''}`} onClick={()=>u('penalty_mode','amount')}>Amount</div>
+            <div className={`toggle-opt${adj.penalty_mode==='days'?' active':''}`} onClick={()=>u('penalty_mode','days')}>Days</div>
+          </div>
           <div className="form-group" style={{marginBottom:6}}>
             <label>Type</label>
             <select value={adj.penalty_type_id||''} onChange={e=>{
               const t=penaltyTypes.find(p=>p.id===e.target.value);
-              u('penalty_type_id',e.target.value);
-              if(t?.default_amount) onChange({...adj,penalty_type_id:e.target.value,penalty_amount:t.default_amount,penalty_reason:t.name});
+              if(t) onChange({...adj,penalty_type_id:e.target.value,penalty_mode:t.default_mode||'amount',penalty_days:t.default_days||'',penalty_amount:t.default_amount||'',penalty_reason:t.name});
+              else u('penalty_type_id',e.target.value);
             }}>
               <option value="">Select type…</option>
-              {penaltyTypes.map(p=><option key={p.id} value={p.id}>{p.name}{p.default_amount?` (EGP ${fmt(p.default_amount)})`:''}</option>)}
+              {penaltyTypes.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-          <div className="form-group" style={{marginBottom:6}}>
-            <label>Amount (EGP)</label>
-            <input type="number" min="0" value={adj.penalty_amount||''} onChange={e=>u('penalty_amount',e.target.value)} placeholder="0" />
+          {adj.penalty_mode==='days'
+            ?<div className="form-group" style={{marginBottom:4}}>
+              <label>Days (0.5 increments)</label>
+              <input type="number" min="0" step="0.5" value={adj.penalty_days||''} onChange={e=>u('penalty_days',e.target.value)} placeholder="0"/>
+              {Number(adj.penalty_days||0)>5&&<div style={{fontSize:11,color:'var(--danger)',marginTop:3}}>⚠️ Exceeds 5-day/incident cap</div>}
+            </div>
+            :<div className="form-group" style={{marginBottom:4}}>
+              <label>Amount (EGP)</label>
+              <input type="number" min="0" value={adj.penalty_amount||''} onChange={e=>u('penalty_amount',e.target.value)} placeholder="0"/>
+            </div>}
+          <div style={{fontSize:12,color:'var(--danger)',fontWeight:600}}>
+            − EGP {fmt(adj.penalty_mode==='days'?Math.min(Number(adj.penalty_days||0)*(grossUp(emp.target_net)/30),15*(grossUp(emp.target_net)/30)):Number(adj.penalty_amount||0))}
           </div>
         </div>
- 
+
         {/* Loan */}
         <div className="adj-section">
           <div className="section-title">Loan Deduction</div>
@@ -1237,7 +1268,7 @@ function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
               <input type="number" min="0" value={adj.loan_deduction||''} onChange={e=>u('loan_deduction',e.target.value)} placeholder="0" />
             </div></>}
         </div>
- 
+
         {/* Advance */}
         <div className="adj-section">
           <div className="section-title">Advance</div>
@@ -1246,12 +1277,12 @@ function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
             <input type="number" min="0" value={adj.advance||''} onChange={e=>u('advance',e.target.value)} placeholder="0" />
           </div>
         </div>
- 
+
       </div>
     </div>
   );
 }
- 
+
 function RunPayrollTab({ onRunCreated }) {
   const [month,setMonth]=useState(today().slice(0,7));
   const [closing,setClosing]=useState(today());
@@ -1263,21 +1294,32 @@ function RunPayrollTab({ onRunCreated }) {
   const [adjs,setAdjs]=useState({});
   const [expandedEmp,setExpandedEmp]=useState(null);
   const [preview,setPreview]=useState(null);
+  const [prevLines,setPrevLines]=useState([]);
+  const [varianceThreshold,setVarianceThreshold]=useState(15);
+  const [varAcks,setVarAcks]=useState({});
+  const [ackAll,setAckAll]=useState(false);
   const [calculating,setCalculating]=useState(false);
   const [saving,setSaving]=useState(false);
   const [msg,setMsg]=useState(null);
- 
+
   const calculate=async()=>{
-    setCalculating(true);setMsg(null);setPreview(null);
+    setCalculating(true);setMsg(null);setPreview(null);setVarAcks({});setAckAll(false);
     const year=new Date(closing).getFullYear();
-    const [{data:emps},{data:ls},{data:lbs},{data:fa},{data:pt}]=await Promise.all([
+    const [{data:emps},{data:ls},{data:lbs},{data:fa},{data:pt},{data:sets},{data:prevRun}]=await Promise.all([
       sb.from('employees').select('*').eq('status','active'),
       sb.from('loans').select('*').eq('status','active'),
       sb.from('leave_balances').select('*').eq('year',year),
       sb.from('allowances').select('*').eq('active',true).eq('type','fixed'),
       sb.from('penalty_types').select('*').order('name'),
+      sb.from('settings').select('*'),
+      sb.from('payroll_runs').select('id').eq('status','finalized').order('closing_date',{ascending:false}).limit(1),
     ]);
     if(!emps||emps.length===0){setMsg({type:'danger',text:'No active employees.'});setCalculating(false);return;}
+    const setsMap={};(sets||[]).forEach(s=>setsMap[s.key]=s.value);
+    const vt=Number(setsMap.variance_threshold||15);setVarianceThreshold(vt);
+    let prevLinesData=[];
+    if(prevRun&&prevRun.length>0){const{data:pl}=await sb.from('payroll_lines').select('employee_id,dispensed_net').eq('run_id',prevRun[0].id);prevLinesData=pl||[];}
+    setPrevLines(prevLinesData);
     setEmployees(emps);setLoans(ls||[]);setLeaveBalances(lbs||[]);setFixedAllowances(fa||[]);setPenaltyTypes(pt||[]);
     // init adjs from active loans
     const initAdjs={};
@@ -1299,7 +1341,7 @@ function RunPayrollTab({ onRunCreated }) {
     });
     setPreview(lines);setCalculating(false);
   };
- 
+
   const recalcLine=(empId)=>{
     if(!preview) return;
     const emp=employees.find(e=>e.id===empId);
@@ -1309,19 +1351,19 @@ function RunPayrollTab({ onRunCreated }) {
     const newLine=calcEmployee(emp,closing,empAdj,empAllowances,leaveBal);
     setPreview(p=>p.map(l=>l.employee_id===empId?newLine:l));
   };
- 
+
   const updateAdj=(empId,newAdj)=>{
     setAdjs(p=>({...p,[empId]:newAdj}));
     // debounce recalc
     setTimeout(()=>recalcLine(empId),50);
   };
- 
+
   const finalize=async()=>{
     if(!preview) return;
     setSaving(true);
     const {data:run,error}=await sb.from('payroll_runs').insert({month,closing_date:closing,status:'draft'}).select().single();
     if(error){setMsg({type:'danger',text:'Failed: '+error.message});setSaving(false);return;}
- 
+
     const inserts=preview.map(l=>({
       run_id:run.id, employee_id:l.employee_id,
       pro_rata_factor:l.pro_rata_factor,
@@ -1346,7 +1388,7 @@ function RunPayrollTab({ onRunCreated }) {
       total_employer_cost:l.total_employer_cost,
     }));
     await sb.from('payroll_lines').insert(inserts);
- 
+
     // update leave balances
     for (const l of preview) {
       if (l.leave_from_balance > 0) {
@@ -1367,20 +1409,31 @@ function RunPayrollTab({ onRunCreated }) {
         }
       }
     }
- 
+
     await sb.from('payroll_runs').update({status:'finalized'}).eq('id',run.id);
     setMsg({type:'success',text:'Payroll finalized and saved.'});
     setPreview(null);setSaving(false);
     if(onRunCreated) onRunCreated();
   };
- 
+
+  const flagged=useMemo(()=>{
+    if(!preview||!prevLines.length)return[];
+    return preview.filter(l=>{
+      const prev=prevLines.find(p=>p.employee_id===l.employee_id);
+      if(!prev)return false;
+      const chg=Math.abs((l.dispensed_net-(prev.dispensed_net||0))/(prev.dispensed_net||1))*100;
+      return chg>varianceThreshold;
+    });
+  },[preview,prevLines,varianceThreshold]);
+  const canFinalize=flagged.length===0||(ackAll||flagged.every(l=>varAcks[l.employee_id]));
+
   const totals=useMemo(()=>preview?{
     earn: preview.reduce((s,l)=>s+l.dispensed_total_earn,0),
     ded:  preview.reduce((s,l)=>s+l.dispensed_total_ded,0),
     net:  preview.reduce((s,l)=>s+l.dispensed_net,0),
     cost: preview.reduce((s,l)=>s+l.total_employer_cost,0),
   }:null,[preview]);
- 
+
   return (<>
     {msg&&<div className={`alert alert-${msg.type}`}>{msg.text}</div>}
     <div className="card mb-24">
@@ -1395,7 +1448,7 @@ function RunPayrollTab({ onRunCreated }) {
         </div>
       </div>
     </div>
- 
+
     {preview&&<>
       <div className="stats mb-24">
         <div className="stat accent"><div className="stat-label">Employees</div><div className="stat-value">{preview.length}</div></div>
@@ -1403,13 +1456,13 @@ function RunPayrollTab({ onRunCreated }) {
         <div className="stat"><div className="stat-label">Total Earnings</div><div className="stat-value" style={{fontSize:16}}>EGP {fmt(totals.earn)}</div></div>
         <div className="stat"><div className="stat-label">Employer Cost</div><div className="stat-value" style={{fontSize:16}}>EGP {fmt(totals.cost)}</div></div>
       </div>
- 
+
       <div className="card mb-24">
         <div className="card-header">
           <div className="card-title">Payroll Preview — {mLabel(month)}</div>
           <div className="flex">
             <div className="alert alert-info" style={{margin:0,padding:'5px 10px',fontSize:12}}>Expand each employee to adjust OT, leave, penalties…</div>
-            <button className="btn btn-gold" onClick={finalize} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'✔ Finalize & Save'}</button>
+            <button className="btn btn-gold" onClick={finalize} disabled={saving||!canFinalize}>{saving?<><span className="spinner"></span> Saving…</>:'✔ Finalize & Save'}</button>
           </div>
         </div>
         <div className="tbl-wrap">
@@ -1475,7 +1528,7 @@ function RunPayrollTab({ onRunCreated }) {
     </>}
   </>);
 }
- 
+
 // ── HISTORY + REGISTER ────────────────────────────────────────────────────────
 function HistoryTab({ onViewRun }) {
   const [runs,setRuns]=useState([]);
@@ -1511,7 +1564,7 @@ function HistoryTab({ onViewRun }) {
     </div>
   );
 }
- 
+
 function RegisterView({ run, onBack, onViewPayslip }) {
   const [lines,setLines]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -1524,7 +1577,7 @@ function RegisterView({ run, onBack, onViewPayslip }) {
       setLines(data||[]);setLoading(false);
     })();
   },[run.id]);
- 
+
   const exportCSV=()=>{
     const h=['Emp Code','Name','Dept','Pro-Rata','Gross','Allow+OT','SI','Tax','Late','Leave Ded','Penalty','Loan','Advance','Total Earn','Total Ded','Dispensed Net','Employer SI','Employer Cost'];
     const rows=lines.map(l=>[
@@ -1538,7 +1591,7 @@ function RegisterView({ run, onBack, onViewPayslip }) {
     ]);
     downloadCSV(h,rows,`Eterna_Payroll_${run.month}.csv`);
   };
- 
+
   const exportExcelBoth=()=>{
     const exportLines = lines.map(l=>({
       ...l,
@@ -1558,14 +1611,14 @@ function RegisterView({ run, onBack, onViewPayslip }) {
     const monthAr = toArabicMonth(run.month);
     exportPayrollExcel(exportLines, monthEn, monthAr, run.closing_date);
   };
- 
+
   const totals=lines.reduce((s,l)=>({
     earn:s.earn+(l.dispensed_total_earn||0),
     ded:s.ded+(l.dispensed_total_ded||0),
     net:s.net+(l.dispensed_net||0),
     cost:s.cost+(l.total_employer_cost||0),
   }),{earn:0,ded:0,net:0,cost:0});
- 
+
   return (<>
     <div className="flex mb-24" style={{flexWrap:'wrap',gap:8}}>
       <button className="btn btn-secondary" onClick={onBack}>← Back</button>
@@ -1635,7 +1688,7 @@ function RegisterView({ run, onBack, onViewPayslip }) {
     </div>
   </>);
 }
- 
+
 // ── PAYSLIP ───────────────────────────────────────────────────────────────────
 function PayslipView({ data, onBack }) {
   const { line, run } = data;
@@ -1669,7 +1722,7 @@ function PayslipView({ data, onBack }) {
             <div className="meta-row"><span className="meta-key">Closing Date</span><span className="meta-val">{run.closing_date}</span></div>
             {line.pro_rata_factor<1&&<div className="meta-row"><span className="meta-key">Pro-Rata</span><span className="meta-val" style={{color:'var(--gold)'}}>{fmtPct(line.pro_rata_factor)} (partial month)</span></div>}
           </div>
- 
+
           <div className="ps-section">
             <div className="ps-title">Earnings</div>
             <div className="ps-line"><span>Basic Gross Salary{line.pro_rata_factor<1?` (${fmtPct(line.pro_rata_factor)} of EGP ${fmt(line.gross_full)})`:''}</span><span style={{fontWeight:600}}>EGP {fmt(line.dispensed_gross)}</span></div>
@@ -1678,7 +1731,7 @@ function PayslipView({ data, onBack }) {
             {(line.ot_value||0)>0&&<div className="ps-line"><span>Overtime ({line.ot_hours} hrs × EGP {fmt(line.ot_rate)})</span><span style={{color:'var(--success)'}}>+ EGP {fmt((line.ot_value||0)*line.pro_rata_factor)}</span></div>}
             <div className="ps-line" style={{fontWeight:600}}><span>Total Earnings</span><span>EGP {fmt(line.dispensed_total_earn)}</span></div>
           </div>
- 
+
           <div className="ps-section">
             <div className="ps-title">Deductions</div>
             <div className="ps-line"><span>Social Insurance (11%)</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_emp_si)}</span></div>
@@ -1690,17 +1743,17 @@ function PayslipView({ data, onBack }) {
             {(line.dispensed_advance||0)>0&&<div className="ps-line"><span>Advance</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_advance)}</span></div>}
             <div className="ps-line" style={{fontWeight:600}}><span>Total Deductions</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_total_ded)}</span></div>
           </div>
- 
+
           <div className="ps-total">
             <div style={{fontWeight:500}}>Net Salary to Dispense</div>
             <div style={{fontSize:20,fontWeight:700}}>EGP {fmt(line.dispensed_net)}</div>
           </div>
- 
+
           {line.leave_days>0&&<div className="ps-leave">
             Leave: {line.leave_days} day(s) taken · {line.leave_from_balance>0?`${line.leave_from_balance}d from balance`:''}{line.leave_from_salary>0?` · ${line.leave_from_salary}d deducted from salary`:''}
             {line.leave_bal_after!=null&&` · Remaining balance: ${line.leave_bal_after} days`}
           </div>}
- 
+
           <div className="ps-employer">
             <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--ink-light)',marginBottom:8}}>Employer Cost (Confidential)</div>
             <div className="ps-line" style={{borderBottom:'1px solid #E8E8E8'}}><span>Gross Salary</span><span>EGP {fmt(line.dispensed_gross)}</span></div>
@@ -1716,15 +1769,15 @@ function PayslipView({ data, onBack }) {
     </div>
   );
 }
- 
- 
+
+
 // ── EXCEL EXPORT ─────────────────────────────────────────────────────────────
 const MAROON_HEX = '8B1A2E';
 const NAVY_HEX   = '1F3864';
 const NAVY2_HEX  = '1A5276';
 const LGRAY_HEX  = 'F2F2F2';
 const LMAR_HEX   = 'F9F0F2';
- 
+
 function xlsStyle(opts = {}) {
   const s = {};
   if (opts.bold || opts.fg || opts.size || opts.italic) {
@@ -1741,19 +1794,19 @@ function xlsStyle(opts = {}) {
   s.border = { top: bd, bottom: bd, left: bd, right: bd };
   return s;
 }
- 
+
 function buildEternaSheet(lines, monthAr, closingDate) {
   const ws = {};
   const nf = '#,##0.00';
   const ifmt = '#,##0';
- 
+
   function sc(r, c, v, style, fmt) {
     const ref = XLSX.utils.encode_cell({ r: r - 1, c: c - 1 });
     ws[ref] = { v: v ?? '', t: typeof v === 'number' ? 'n' : 's', s: style };
     if (fmt) ws[ref].z = fmt;
     if (v == null || v === '') ws[ref].t = 's';
   }
- 
+
   // Row 1 - Title
   sc(1, 1, `أجور ورواتب العاملين شركة إتيرنا للتطوير العمراني ${monthAr}`,
      xlsStyle({ bold:true, size:14, fg:WHITE_HEX||'FFFFFF', bg:MAROON_HEX, ha:'center', wrap:true }));
@@ -1761,7 +1814,7 @@ function buildEternaSheet(lines, monthAr, closingDate) {
   sc(1, 29, 'أجازات',  xlsStyle({ bold:true, fg:'FFFFFF', bg:MAROON_HEX }));
   sc(1, 32, 'جزاءات',  xlsStyle({ bold:true, fg:'FFFFFF', bg:MAROON_HEX }));
   sc(1, 35, 'إضافي',   xlsStyle({ bold:true, fg:'FFFFFF', bg:MAROON_HEX }));
- 
+
   // Row 2 - Main headers
   const hdr2 = [
     [1,'م'],[2,'رقم الموظف'],[3,'الإسم'],[4,'الإدارة'],[5,'المسمي الوظيفي'],
@@ -1772,7 +1825,7 @@ function buildEternaSheet(lines, monthAr, closingDate) {
   hdr2.forEach(([col, label]) =>
     sc(2, col, label, xlsStyle({ bold:true, size:8, fg:'FFFFFF', bg:'2E4057', wrap:true }))
   );
- 
+
   // Row 3 - Sub headers
   const hdr3 = [
     [13,'البدلات'],[14,'إضافي'],[15,'حوافز'],[16,'صافي الراتب'],[17,'إجمالي المستحق'],
@@ -1785,7 +1838,7 @@ function buildEternaSheet(lines, monthAr, closingDate) {
   hdr3.forEach(([col, label]) =>
     sc(3, col, label, xlsStyle({ bold:true, size:8, fg:'FFFFFF', bg:NAVY_HEX, wrap:true }))
   );
- 
+
   // Data rows
   lines.forEach((l, idx) => {
     const row = idx + 4;
@@ -1794,10 +1847,10 @@ function buildEternaSheet(lines, monthAr, closingDate) {
     const fixA = (l.fixed_allowances || 0) * pf;
     const varA = (l.variable_allowance || 0) * pf;
     const inc  = (l.incentive || 0) * pf;
- 
+
     const ds = (fg) => xlsStyle({ size:9, fg: fg||'1A1A1A', bg, ha:'center' });
     const ns = (fg) => ({ ...ds(fg), z: nf });
- 
+
     sc(row, 1,  idx+1,             xlsStyle({size:9,bg,ha:'center'}), ifmt);
     sc(row, 2,  l.emp_code||'',    xlsStyle({size:9,bg,ha:'center'}));
     sc(row, 3,  l.name||'',        xlsStyle({size:9,bg,ha:'right'}));
@@ -1833,7 +1886,7 @@ function buildEternaSheet(lines, monthAr, closingDate) {
     sc(row, 37, l.ot_rate||0,       ds(), nf);
     sc(row, 38, l.dispensed_ot||0,  ds(), nf);
   });
- 
+
   // Totals row
   const tr = lines.length + 4;
   const totStyle = xlsStyle({ bold:true, size:9, fg:MAROON_HEX, bg:LMAR_HEX, ha:'center' });
@@ -1858,14 +1911,14 @@ function buildEternaSheet(lines, monthAr, closingDate) {
     }, 0);
     sc(tr, col, tot, totStyle, nf);
   });
- 
+
   // Signatures
   const sr = tr + 2;
   sc(sr,   1,  'مدير الموارد البشرية', xlsStyle({ bold:true, size:10, fg:MAROON_HEX, ha:'right' }));
   sc(sr,   15, 'يعتمــد ،،،',           xlsStyle({ bold:true, size:10, fg:MAROON_HEX }));
   sc(sr+2, 1,  'م. محمد عبدالباقي',    xlsStyle({ size:10, fg:'333333', ha:'right' }));
   sc(sr+2, 15, 'المدير العام',          xlsStyle({ size:10, fg:'333333' }));
- 
+
   // Col widths
   ws['!cols'] = [
     {wch:6},{wch:12},{wch:28},{wch:16},{wch:18},{wch:13},{wch:18},{wch:13},{wch:6},
@@ -1877,7 +1930,7 @@ function buildEternaSheet(lines, monthAr, closingDate) {
   ws['!rows'] = [{hpt:32},{hpt:42},{hpt:30},...lines.map(()=>({hpt:18})),{hpt:22}];
   ws['!ref']  = XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:tr+3, c:37} });
   ws['!rightToLeft'] = true;
- 
+
   // Merges
   ws['!merges'] = [
     {s:{r:0,c:0}, e:{r:0,c:23}},    // A1:X1 title
@@ -1901,16 +1954,16 @@ function buildEternaSheet(lines, monthAr, closingDate) {
   [0,1,2,3,4,5,6,7,8,9,10,11].forEach(ci => {
     ws['!merges'].push({s:{r:1,c:ci},e:{r:2,c:ci}});
   });
- 
+
   return ws;
 }
- 
+
 const WHITE_HEX = 'FFFFFF';
- 
+
 function buildModernSheet(lines, monthEn, closingDate) {
   const ws = {};
   const nf = '#,##0.00';
- 
+
   const cols = [
     'Emp ID','Name','Department','Job Title','Hire Date','National ID',
     'Bank','Account No.','Pro-Rata','Basic Gross','Fixed Allow.',
@@ -1920,14 +1973,14 @@ function buildModernSheet(lines, monthEn, closingDate) {
     'Employer SI','Total Emp. Cost'
   ];
   const nc = cols.length;
- 
+
   function sc(r, c, v, style, fmt) {
     const ref = XLSX.utils.encode_cell({ r: r-1, c: c-1 });
     ws[ref] = { v: v ?? '', t: typeof v === 'number' ? 'n' : 's', s: style };
     if (fmt) ws[ref].z = fmt;
     if (v == null || v === '') ws[ref].t = 's';
   }
- 
+
   // Row 1 title
   sc(1,1,`ETERNA DEVELOPMENTS — Payroll Register — ${monthEn}`,
      xlsStyle({bold:true,size:13,fg:'FFFFFF',bg:MAROON_HEX,ha:'center'}));
@@ -1939,13 +1992,13 @@ function buildModernSheet(lines, monthEn, closingDate) {
     const bg = i >= 23 ? NAVY2_HEX : NAVY_HEX;
     sc(3, i+1, label, xlsStyle({bold:true,size:8,fg:'FFFFFF',bg,wrap:true}));
   });
- 
+
   lines.forEach((l, idx) => {
     const row = idx + 4;
     const bg  = idx % 2 === 0 ? 'F7F6F4' : 'FFFFFF';
     const pf  = l.pro_rata_factor || 1;
     const ds  = (fg,ha) => xlsStyle({size:9,fg:fg||'1A1A1A',bg,ha:ha||'right'});
- 
+
     sc(row,1, l.emp_code||'',          ds('1A1A1A','center'));
     sc(row,2, l.name||'',              ds('1A1A1A','left'));
     sc(row,3, l.department||'',        ds('1A1A1A','left'));
@@ -1973,7 +2026,7 @@ function buildModernSheet(lines, monthEn, closingDate) {
     sc(row,25, l.dispensed_er_si||0,   ds(), nf);
     sc(row,26, l.total_employer_cost||0, xlsStyle({size:9,bold:true,fg:'1A1A1A',bg,ha:'right'}), nf);
   });
- 
+
   const tr = lines.length + 4;
   const totSt = xlsStyle({bold:true,size:9,fg:'FFFFFF',bg:MAROON_HEX,ha:'right'});
   sc(tr, 1, 'TOTALS', xlsStyle({bold:true,size:10,fg:'FFFFFF',bg:MAROON_HEX,ha:'center'}));
@@ -1993,7 +2046,7 @@ function buildModernSheet(lines, monthEn, closingDate) {
     else if (col === 13) tot = lines.reduce((s,l) => s+((l.incentive||0)*(l.pro_rata_factor||1)),0);
     sc(tr, col, tot, totSt, nf);
   });
- 
+
   ws['!cols'] = [
     {wch:10},{wch:24},{wch:16},{wch:18},{wch:13},{wch:18},
     {wch:14},{wch:16},{wch:10},{wch:14},{wch:14},
@@ -2009,25 +2062,25 @@ function buildModernSheet(lines, monthEn, closingDate) {
     {s:{r:1,c:0},e:{r:1,c:7}},
     {s:{r:tr-1,c:0},e:{r:tr-1,c:7}},
   ];
- 
+
   return ws;
 }
- 
+
 function exportPayrollExcel(lines, monthEn, monthAr, closingDate) {
   const wb = XLSX.utils.book_new();
- 
+
   // Sheet 1: Eterna Arabic format
   const ws1 = buildEternaSheet(lines, monthAr, closingDate);
   XLSX.utils.book_append_sheet(wb, ws1, 'كشف المرتبات');
- 
+
   // Sheet 2: Modern English format
   const ws2 = buildModernSheet(lines, monthEn, closingDate);
   XLSX.utils.book_append_sheet(wb, ws2, 'Modern Register');
- 
+
   const filename = `Eterna_Payroll_${monthEn.replace(' ','_')}.xlsx`;
   XLSX.writeFile(wb, filename, { cellStyles: true });
 }
- 
+
 // Arabic month names
 const ARABIC_MONTHS = {
   '01':'يناير','02':'فبراير','03':'مارس','04':'أبريل','05':'مايو','06':'يونيو',
@@ -2038,64 +2091,303 @@ function toArabicMonth(monthStr) {
   const [yr, mo] = monthStr.split('-');
   return `${ARABIC_MONTHS[mo] || mo} ${yr}`;
 }
- 
-// ── APP ───────────────────────────────────────────────────────────────────────
-function App() {
-  const [tab,setTab]=useState('employees');
-  const [historyView,setHistoryView]=useState(null);
-  const [payslipData,setPayslipData]=useState(null);
- 
+
+// ── ACCESS CONTROL ────────────────────────────────────────────────────────────
+function AccessControlTab(){
+  const[employees,setEmployees]=useState([]);const[access,setAccess]=useState([]);const[loading,setLoading]=useState(true);const[pinModal,setPinModal]=useState(null);const[generatedPin,setGeneratedPin]=useState('');const[copied,setCopied]=useState(false);
+  const load=useCallback(async()=>{setLoading(true);const[{data:e},{data:a}]=await Promise.all([sb.from('employees').select('id,full_name,emp_code,department').eq('status','active').order('full_name'),sb.from('employee_portal_access').select('*')]);setEmployees(e||[]);setAccess(a||[]);setLoading(false);},[]);
+  useEffect(()=>{load();},[load]);
+  const getAcc=id=>access.find(a=>a.employee_id===id);
+  const createAccess=async emp=>{const pin=generatePIN();const hash=await sha256(emp.id+pin);const ex=getAcc(emp.id);if(ex)await sb.from('employee_portal_access').update({pin_hash:hash,is_active:true}).eq('id',ex.id);else await sb.from('employee_portal_access').insert({employee_id:emp.id,pin_hash:hash,is_active:true});setGeneratedPin(pin);setPinModal({emp,action:'create'});load();};
+  const resetPin=async emp=>{const pin=generatePIN();const hash=await sha256(emp.id+pin);await sb.from('employee_portal_access').update({pin_hash:hash}).eq('employee_id',emp.id);setGeneratedPin(pin);setPinModal({emp,action:'reset'});load();};
+  const toggleAcc=async emp=>{const a=getAcc(emp.id);if(!a)return;await sb.from('employee_portal_access').update({is_active:!a.is_active}).eq('id',a.id);load();};
+  const copyPin=()=>{navigator.clipboard.writeText(generatedPin);setCopied(true);setTimeout(()=>setCopied(false),2000);};
+  return(<>
+    <div className="stats"><div className="stat accent"><div className="stat-label">Portal Users</div><div className="stat-value">{access.filter(a=>a.is_active).length}</div></div><div className="stat"><div className="stat-label">Total Employees</div><div className="stat-value">{employees.length}</div></div><div className="stat"><div className="stat-label">No Access</div><div className="stat-value">{employees.length-access.length}</div></div><div className="stat"><div className="stat-label">Suspended</div><div className="stat-value">{access.filter(a=>!a.is_active).length}</div></div></div>
+    <div className="alert alert-info mb-20">Employees log in with their <strong>Employee ID</strong> (e.g. EMP-001) + <strong>6-digit PIN</strong> you set here. Share PINs privately.</div>
+    <div className="card"><div className="card-header"><div className="card-title">Portal Access Management</div></div>
+      <div className="tbl-wrap">{loading?<div className="empty"><div className="empty-text">Loading…</div></div>:<table><thead><tr><th>Employee</th><th>Department</th><th>Portal Status</th><th>Last Login</th><th></th></tr></thead><tbody>{employees.map(emp=>{const a=getAcc(emp.id);return<tr key={emp.id}><td><div style={{fontWeight:500}}>{emp.full_name}</div><div style={{fontSize:11,color:'var(--ink-light)'}}>{emp.emp_code}</div></td><td>{emp.department||'—'}</td><td>{!a?<span className="badge badge-inactive">No Access</span>:a.is_active?<span className="badge badge-active">Active</span>:<span className="badge badge-inactive">Suspended</span>}</td><td className="text-muted" style={{fontSize:12}}>{a?.last_login?new Date(a.last_login).toLocaleDateString('en-EG'):'Never'}</td><td><div className="flex">{!a?<button className="btn btn-primary btn-sm" onClick={()=>createAccess(emp)}>Create Access</button>:<><button className="btn btn-secondary btn-sm" onClick={()=>resetPin(emp)}>Reset PIN</button><button className="btn btn-sm" style={{background:'none',border:'1px solid var(--border)',color:'var(--ink-light)'}} onClick={()=>toggleAcc(emp)}>{a.is_active?'Suspend':'Reinstate'}</button></>}</div></td></tr>;})}
+      </tbody></table>}</div></div>
+    {pinModal&&<Modal title={pinModal.action==='create'?'Portal Access Created':'PIN Reset'} onClose={()=>{setPinModal(null);setCopied(false);}}>
+      <div style={{textAlign:'center'}}><div style={{fontSize:32,marginBottom:8}}>{pinModal.action==='create'?'🔐':'🔄'}</div><div style={{fontWeight:600,marginBottom:4}}>{pinModal.emp.full_name}</div><div style={{color:'var(--ink-light)',fontSize:13,marginBottom:12}}>Employee ID: <strong>{pinModal.emp.emp_code}</strong></div><div style={{fontSize:13,marginBottom:6}}>6-digit PIN (shown once — copy now):</div><div className="pin-display">{generatedPin}</div><button className="btn btn-primary" onClick={copyPin}>{copied?'✓ Copied!':'Copy PIN'}</button><div style={{fontSize:12,color:'var(--ink-light)',marginTop:12}}>⚠️ This PIN will not be shown again. Share it with the employee directly.</div></div>
+    </Modal>}
+  </>);
+}
+
+// ── SETTINGS ──────────────────────────────────────────────────────────────────
+function SettingsTab(){
+  const[settings,setS]=useState({});const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);const[saved,setSaved]=useState(false);
+  const keys=['variance_threshold','company_name','hr_manager_name','general_manager_name','ot_multiplier'];
+  const labels={variance_threshold:'Variance Alert Threshold (%)',company_name:'Company Name',hr_manager_name:'HR Manager Name (Payslip Signature)',general_manager_name:'General Manager Name (Payslip Signature)',ot_multiplier:'OT Rate Multiplier (default 1.35×)'};
+  const defs={variance_threshold:'15',company_name:'Eterna Developments',hr_manager_name:'م. محمد عبدالباقي',general_manager_name:'المدير العام',ot_multiplier:'1.35'};
+  useEffect(()=>{(async()=>{setLoading(true);const{data}=await sb.from('settings').select('*');const m={...defs};(data||[]).forEach(s=>m[s.key]=s.value);setS(m);setLoading(false);})();},[]);
+  const save=async()=>{setSaving(true);for(const k of keys)await sb.from('settings').upsert({key:k,value:String(settings[k]??defs[k]),updated_at:new Date().toISOString()},{onConflict:'key'});setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  if(loading)return<div className="empty"><div className="empty-text">Loading…</div></div>;
+  return(<div className="card"><div className="card-header"><div className="card-title">System Settings</div><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:saved?'✓ Saved':'Save Settings'}</button></div><div className="card-body"><div style={{maxWidth:520,display:'flex',flexDirection:'column',gap:16}}>{keys.map(k=><div key={k} className="form-group"><label>{labels[k]}</label><input value={settings[k]??''} onChange={e=>setS(p=>({...p,[k]:e.target.value}))}/></div>)}</div><div className="alert alert-info" style={{marginTop:20,maxWidth:520}}>Settings apply on next payroll calculation. Changes don't affect finalized runs.</div></div></div>);
+}
+
+// ── ESS PORTAL ────────────────────────────────────────────────────────────────
+function ESSPortal({empId,employeeData,onLogout}){
+  const[tab,setTab]=useState('payslips');const[runs,setRuns]=useState([]);const[runLines,setRunLines]=useState({});const[selectedRun,setSelectedRun]=useState(null);const[leaveBal,setLeaveBal]=useState(null);const[leaveTypes,setLeaveTypes]=useState([]);const[leaveReqs,setLeaveReqs]=useState([]);const[loans,setLoans]=useState([]);const[penalties,setPenalties]=useState([]);const[loading,setLoading]=useState(true);const[reqModal,setReqModal]=useState(false);const[reqForm,setReqForm]=useState({leave_type_id:'',start_date:'',end_date:'',reason:'',document:null});const[submitting,setSubmitting]=useState(false);const[reqMsg,setReqMsg]=useState(null);const fileRef=useRef(null);
+  const yr=new Date().getFullYear();
+  useEffect(()=>{(async()=>{
+    setLoading(true);
+    const[{data:r},{data:lb},{data:lt},{data:lr},{data:ln},{data:pl}]=await Promise.all([
+      sb.from('payroll_runs').select('id,month,closing_date').eq('status','finalized').order('closing_date',{ascending:false}),
+      sb.from('leave_balances').select('*').eq('employee_id',empId).eq('year',yr).maybeSingle(),
+      sb.from('leave_types').select('*').eq('active',true).order('name'),
+      sb.from('leave_requests').select('*,leave_types(name)').eq('employee_id',empId).order('created_at',{ascending:false}),
+      sb.from('loans').select('*').eq('employee_id',empId).eq('status','active'),
+      sb.from('payroll_lines').select('dispensed_penalty,penalty_reason,penalty_mode,penalty_days,run_id,payroll_runs(month)').eq('employee_id',empId).gt('dispensed_penalty',0),
+    ]);
+    setRuns(r||[]);setLeaveBal(lb);setLeaveTypes(lt||[]);setLeaveReqs(lr||[]);setLoans(ln||[]);setPenalties(pl||[]);
+    // Load net for each run
+    if(r&&r.length){const lines={};for(const run of r){const{data:line}=await sb.from('payroll_lines').select('dispensed_net').eq('run_id',run.id).eq('employee_id',empId).maybeSingle();if(line)lines[run.id]=line.dispensed_net;}setRunLines(lines);}
+    setLoading(false);
+  })();},[empId,yr]);
+
+  const calcDays=(s,e,half)=>{if(!s||!e)return 0;const diff=(new Date(e)-new Date(s))/86400000+1;return half?Math.round(diff*2)/2:Math.round(diff);};
+  const selLt=leaveTypes.find(t=>t.id===reqForm.leave_type_id);
+  const previewDays=selLt?calcDays(reqForm.start_date,reqForm.end_date,selLt.allow_half_days):0;
+
+  const submitLeave=async()=>{
+    const lt=leaveTypes.find(t=>t.id===reqForm.leave_type_id);if(!lt){alert('Select leave type.');return;}
+    const days=calcDays(reqForm.start_date,reqForm.end_date,lt.allow_half_days);
+    if(days<=0){alert('Invalid dates.');return;}
+    if(lt.incident_cap>0&&days>lt.incident_cap){alert(`Max ${lt.incident_cap} days per request for this type.`);return;}
+    if(lt.requires_document&&!reqForm.document){alert('Document upload required for this leave type.');return;}
+    setSubmitting(true);setReqMsg(null);
+    let doc_url=null;
+    if(reqForm.document){
+      const path=`leave-docs/${empId}/${Date.now()}_${reqForm.document.name}`;
+      const{error:upErr}=await sb.storage.from('documents').upload(path,reqForm.document);
+      if(upErr){setReqMsg({type:'danger',text:'Upload failed: '+upErr.message});setSubmitting(false);return;}
+      const{data:u}=sb.storage.from('documents').getPublicUrl(path);doc_url=u?.publicUrl;
+    }
+    await sb.from('leave_requests').insert({employee_id:empId,leave_type_id:reqForm.leave_type_id,start_date:reqForm.start_date,end_date:reqForm.end_date,days_requested:days,reason:reqForm.reason||null,document_url:doc_url,status:'pending'});
+    setReqMsg({type:'success',text:'Request submitted. Pending HR approval.'});
+    setReqForm({leave_type_id:'',start_date:'',end_date:'',reason:'',document:null});
+    const{data:lr}=await sb.from('leave_requests').select('*,leave_types(name)').eq('employee_id',empId).order('created_at',{ascending:false});
+    setLeaveReqs(lr||[]);setSubmitting(false);
+  };
+
+  if(loading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}><div className="spinner spinner-dark" style={{width:28,height:28}}></div></div>;
+
+  return(<div className="ess-shell">
+    <div className="ess-topbar">
+      <div style={{fontWeight:700,fontSize:16,letterSpacing:'.04em'}}>ETERNA <span style={{fontWeight:300,fontSize:12,letterSpacing:'.1em'}}>EMPLOYEE PORTAL</span></div>
+      <div style={{display:'flex',alignItems:'center',gap:14}}>
+        <span style={{fontSize:13,color:'rgba(255,255,255,0.8)'}}>{employeeData?.full_name} · {employeeData?.emp_code}</span>
+        <button className="btn btn-sm" style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'none'}} onClick={onLogout}>Logout</button>
+      </div>
+    </div>
+    <div className="ess-nav">{[['payslips','📄 Payslips'],['leave','🏖️ Leave'],['loans','💳 Loans'],['penalties','⚠️ Penalties']].map(([id,label])=><div key={id} className={`ess-nav-item${tab===id?' active':''}`} onClick={()=>{setTab(id);setSelectedRun(null);}}>{label}</div>)}</div>
+    <div className="ess-content">
+      {tab==='payslips'&&!selectedRun&&<>
+        <div style={{fontWeight:600,fontSize:16,marginBottom:16}}>My Payslips</div>
+        {runs.length===0?<div className="empty"><div className="empty-icon">📄</div><div className="empty-text">No payslips yet.</div></div>:
+        <div className="card"><div className="tbl-wrap"><table><thead><tr><th>Month</th><th>Closing Date</th><th className="tbl-num">Net Salary</th><th></th></tr></thead><tbody>{runs.map(r=><tr key={r.id}><td style={{fontWeight:500}}>{mLabel(r.month)}</td><td>{r.closing_date}</td><td className="tbl-num text-success">{runLines[r.id]!=null?`EGP ${fmt(runLines[r.id])}`:'—'}</td><td><button className="btn btn-secondary btn-sm" onClick={()=>setSelectedRun(r)}>View & Download</button></td></tr>)}</tbody></table></div></div>}
+      </>}
+      {tab==='payslips'&&selectedRun&&<ESSPayslipView run={selectedRun} empId={empId} employeeData={employeeData} onBack={()=>setSelectedRun(null)}/>}
+      {tab==='leave'&&<>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:16}}>
+          <div className="card" style={{marginBottom:0}}><div className="card-body"><div className="stat-label">Annual Leave Balance {yr}</div><div style={{fontSize:26,fontWeight:700,color:leaveBal?.remaining_days>0?'var(--success)':'var(--danger)'}}>{leaveBal?.remaining_days??'—'} days</div><div style={{fontSize:12,color:'var(--ink-light)',marginTop:4}}>Entitlement: {leaveBal?.annual_entitlement??'—'}d · Used: {leaveBal?.used_days??0}d</div></div></div>
+          <div className="card" style={{marginBottom:0}}><div className="card-body"><div className="stat-label">Requests</div><div style={{fontSize:22,fontWeight:700}}>{leaveReqs.length}</div><div style={{fontSize:12,color:'var(--ink-light)',marginTop:4}}>Pending: {leaveReqs.filter(r=>r.status==='pending').length} · Approved: {leaveReqs.filter(r=>r.status==='approved').length}</div></div></div>
+        </div>
+        <div className="card"><div className="card-header"><div className="card-title">Leave Requests</div><button className="btn btn-primary btn-sm" onClick={()=>{setReqModal(true);setReqMsg(null);}}>+ Submit Request</button></div>
+          <div className="tbl-wrap">{leaveReqs.length===0?<div className="empty"><div className="empty-text">No leave requests.</div></div>:<table><thead><tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th>HR Note</th></tr></thead><tbody>{leaveReqs.map(r=><tr key={r.id}><td>{r.leave_types?.name||'—'}</td><td style={{fontSize:12}}>{r.start_date} → {r.end_date}</td><td style={{fontWeight:600}}>{r.days_requested}d</td><td><span className={`badge badge-${r.status}`}>{r.status}</span></td><td style={{fontSize:12,color:'var(--ink-light)'}}>{r.hr_note||'—'}</td></tr>)}</tbody></table>}</div>
+        </div>
+        {reqModal&&<Modal title="Submit Leave Request" onClose={()=>setReqModal(false)} footer={<><button className="btn btn-secondary" onClick={()=>setReqModal(false)}>Cancel</button><button className="btn btn-primary" onClick={submitLeave} disabled={submitting}>{submitting?<><span className="spinner"></span> Submitting…</>:'Submit'}</button></>}>
+          {reqMsg&&<div className={`alert alert-${reqMsg.type}`}>{reqMsg.text}</div>}
+          <div className="form-grid">
+            <div className="form-group full"><label>Leave Type *</label><select value={reqForm.leave_type_id} onChange={e=>setReqForm(p=>({...p,leave_type_id:e.target.value}))}><option value="">Select…</option>{leaveTypes.map(t=><option key={t.id} value={t.id}>{t.name}{t.annual_cap>0?` (max ${t.annual_cap}d/yr)`:''}{t.incident_cap>0?` (max ${t.incident_cap}d/req)`:''}</option>)}</select></div>
+            <div className="form-group"><label>Start Date *</label><input type="date" value={reqForm.start_date} onChange={e=>setReqForm(p=>({...p,start_date:e.target.value}))}/></div>
+            <div className="form-group"><label>End Date *</label><input type="date" value={reqForm.end_date} onChange={e=>setReqForm(p=>({...p,end_date:e.target.value}))}/></div>
+            {selLt&&reqForm.start_date&&reqForm.end_date&&<div className="form-group full"><div className="alert alert-info" style={{marginBottom:0}}>Days: <strong>{previewDays}</strong>{selLt.deduction_source==='balance_annual'&&leaveBal?` · Balance remaining: ${leaveBal.remaining_days}d`:''}</div></div>}
+            <div className="form-group full"><label>Reason</label><textarea value={reqForm.reason} onChange={e=>setReqForm(p=>({...p,reason:e.target.value}))} rows={2} style={{resize:'vertical'}}/></div>
+            {selLt?.requires_document&&<div className="form-group full"><label>Document Upload (Required for this type)</label><input type="file" ref={fileRef} onChange={e=>setReqForm(p=>({...p,document:e.target.files[0]||null}))}/>{reqForm.document&&<div style={{fontSize:12,color:'var(--success)',marginTop:3}}>✓ {reqForm.document.name}</div>}</div>}
+          </div>
+        </Modal>}
+      </>}
+      {tab==='loans'&&<>
+        <div style={{fontWeight:600,fontSize:16,marginBottom:16}}>My Loans</div>
+        {loans.length===0?<div className="empty"><div className="empty-icon">💳</div><div className="empty-text">No active loans.</div></div>:loans.map(l=><div key={l.id} className="card"><div className="card-body"><div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}><div><div className="stat-label">Loan Amount</div><div style={{fontSize:18,fontWeight:700}}>EGP {fmt(l.amount)}</div></div><div><div className="stat-label">Monthly Deduction</div><div style={{fontSize:18,fontWeight:700,color:'var(--danger)'}}>EGP {fmt(l.monthly_deduction)}</div></div><div><div className="stat-label">Remaining</div><div style={{fontSize:18,fontWeight:700,color:'var(--maroon)'}}>EGP {fmt(l.remaining_balance)}</div></div></div>{l.reason&&<div style={{marginTop:10,fontSize:13,color:'var(--ink-light)'}}>Reason: {l.reason}</div>}</div></div>)}
+      </>}
+      {tab==='penalties'&&<>
+        <div style={{fontWeight:600,fontSize:16,marginBottom:16}}>My Penalty History</div>
+        {penalties.length===0?<div className="empty"><div className="empty-icon">✅</div><div className="empty-text">No penalties on record.</div></div>:
+        <div className="card"><div className="tbl-wrap"><table><thead><tr><th>Month</th><th>Mode</th><th className="tbl-num">Days</th><th className="tbl-num">Amount (EGP)</th><th>Reason</th></tr></thead><tbody>{penalties.map((p,i)=><tr key={i}><td>{mLabel(p.payroll_runs?.month)}</td><td><span className={`badge ${p.penalty_mode==='days'?'badge-active':'badge-draft'}`}>{p.penalty_mode}</span></td><td className="tbl-num">{p.penalty_days||'—'}</td><td className="tbl-num text-danger">{fmt(p.dispensed_penalty)}</td><td>{p.penalty_reason||'—'}</td></tr>)}</tbody></table></div></div>}
+      </>}
+    </div>
+  </div>);
+}
+
+function ESSPayslipView({run,empId,employeeData,onBack}){
+  const[line,setLine]=useState(null);const[loading,setLoading]=useState(true);
+  useEffect(()=>{(async()=>{setLoading(true);const{data}=await sb.from('payroll_lines').select('*').eq('run_id',run.id).eq('employee_id',empId).maybeSingle();setLine(data);setLoading(false);})();},[run.id,empId]);
+  if(loading)return<div className="empty"><div className="spinner spinner-dark" style={{width:20,height:20,margin:'24px auto'}}></div></div>;
+  if(!line)return<div className="empty"><div className="empty-text">Payslip not found.</div></div>;
+  // build a line object compatible with Payslip component
+  const lineWithEmp={...line,employees:{...employeeData},gross_full:line.gross_full};
+  return(<div className="payslip-wrap">
+    <div className="flex mb-20" style={{justifyContent:'space-between'}}><button className="btn btn-secondary" onClick={onBack}>← Back</button><button className="btn btn-primary" onClick={()=>window.print()}>🖨 Print / Save PDF</button></div>
+    <div className="payslip">
+      <div className="ps-header"><div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}><div><div style={{fontSize:22,fontWeight:800,letterSpacing:'.04em'}}>ETERNA</div><div style={{fontSize:10,color:'rgba(255,255,255,0.55)',letterSpacing:'.12em',textTransform:'uppercase',marginTop:2}}>Developments</div></div><div style={{textAlign:'right'}}><div style={{fontSize:15,fontWeight:300,letterSpacing:'.08em',textTransform:'uppercase'}}>Pay Slip</div><div style={{fontSize:12,color:'rgba(255,255,255,0.7)',marginTop:4}}>{mLabel(run.month)}</div></div></div></div>
+      <div className="ps-body">
+        <div className="ps-meta">
+          <div className="ps-meta-row"><span className="ps-key">Employee Name</span><span className="ps-val">{employeeData?.full_name}</span></div>
+          <div className="ps-meta-row"><span className="ps-key">Employee ID</span><span className="ps-val">{employeeData?.emp_code||'—'}</span></div>
+          <div className="ps-meta-row"><span className="ps-key">Job Title</span><span className="ps-val">{employeeData?.job_title||'—'}</span></div>
+          <div className="ps-meta-row"><span className="ps-key">Department</span><span className="ps-val">{employeeData?.department||'—'}</span></div>
+          <div className="ps-meta-row"><span className="ps-key">Hire Date</span><span className="ps-val">{employeeData?.hire_date}</span></div>
+          <div className="ps-meta-row"><span className="ps-key">Month</span><span className="ps-val">{mLabel(run.month)}</span></div>
+          {(line.pro_rata_factor||1)<1&&<div className="ps-meta-row"><span className="ps-key">Pro-Rata</span><span className="ps-val" style={{color:'var(--gold)'}}>{fmtPct(line.pro_rata_factor)}</span></div>}
+        </div>
+        <div className="ps-section"><div className="ps-section-title">Earnings</div>
+          <div className="ps-line"><span>Basic Gross Salary</span><span style={{fontWeight:600}}>EGP {fmt(line.dispensed_gross)}</span></div>
+          {((line.fixed_allowances||0)+(line.variable_allowance||0))>0&&<div className="ps-line"><span>Allowances</span><span style={{color:'var(--success)'}}>+ EGP {fmt(((line.fixed_allowances||0)+(line.variable_allowance||0))*(line.pro_rata_factor||1))}</span></div>}
+          {(line.incentive||0)>0&&<div className="ps-line"><span>Incentive</span><span style={{color:'var(--success)'}}>+ EGP {fmt((line.incentive||0)*(line.pro_rata_factor||1))}</span></div>}
+          {(line.dispensed_ot||0)>0&&<div className="ps-line"><span>Overtime ({line.ot_hours||0} hrs)</span><span style={{color:'var(--success)'}}>+ EGP {fmt(line.dispensed_ot)}</span></div>}
+          <div className="ps-line" style={{fontWeight:600}}><span>Total Earnings</span><span>EGP {fmt(line.dispensed_total_earn)}</span></div>
+        </div>
+        <div className="ps-section"><div className="ps-section-title">Deductions</div>
+          <div className="ps-line"><span>Social Insurance (11%)</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_emp_si)}</span></div>
+          <div className="ps-line"><span>Income Tax</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_tax)}</span></div>
+          {(line.dispensed_late||0)>0&&<div className="ps-line"><span>Lateness</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_late)}</span></div>}
+          {(line.dispensed_leave_ded||0)>0&&<div className="ps-line"><span>Leave Deduction</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_leave_ded)}</span></div>}
+          {(line.dispensed_penalty||0)>0&&<div className="ps-line"><span>Penalty{line.penalty_mode==='days'?` (${line.penalty_days}d)`:''}{line.penalty_reason?` — ${line.penalty_reason}`:''}</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_penalty)}</span></div>}
+          {(line.dispensed_loan||0)>0&&<div className="ps-line"><span>Loan Deduction</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_loan)}</span></div>}
+          {(line.dispensed_advance||0)>0&&<div className="ps-line"><span>Advance</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_advance)}</span></div>}
+          <div className="ps-line" style={{fontWeight:600}}><span>Total Deductions</span><span style={{color:'var(--danger)'}}>− EGP {fmt(line.dispensed_total_ded)}</span></div>
+        </div>
+        <div className="ps-net"><div style={{fontWeight:500}}>Net Salary to Dispense</div><div style={{fontSize:20,fontWeight:700}}>EGP {fmt(line.dispensed_net)}</div></div>
+        {(line.leave_days||0)>0&&<div className="ps-leave-note">Leave: {line.leave_days}d taken{(line.leave_from_balance||0)>0?` · ${line.leave_from_balance}d from balance`:''}{(line.leave_from_salary||0)>0?` · ${line.leave_from_salary}d deducted from salary`:''}{line.leave_bal_after!=null?` · Balance remaining: ${line.leave_bal_after}d`:''}</div>}
+      </div>
+      <div className="ps-footer"><span>Generated: {new Date().toLocaleDateString('en-EG')}</span><span>CONFIDENTIAL — Eterna Developments</span></div>
+    </div>
+  </div>);
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+function LoginScreen({onAdminLogin,onEmpLogin}){
+  const[mode,setMode]=useState('admin');const[user,setUser]=useState('');const[pass,setPass]=useState('');const[empId,setEmpId]=useState('');const[pin,setPin]=useState('');const[err,setErr]=useState('');const[locked,setLocked]=useState(false);const[loading,setLoading]=useState(false);
+  const attempts=useRef(0);
+  const doAdmin=async()=>{if(!user||!pass){setErr('Enter username and password.');return;}setLoading(true);setErr('');const h=await sha256(pass);const ah=await sha256('993617');if(user===ADMIN_USER&&h===ah){onAdminLogin();}else{setErr('Invalid username or password.');setLoading(false);};};
+  const doEmp=async()=>{
+    if(!empId||!pin){setErr('Enter Employee ID and PIN.');return;}if(locked){setErr('Too many failed attempts. Contact HR.');return;}
+    setLoading(true);setErr('');
+    const{data:emp}=await sb.from('employees').select('*').ilike('emp_code',empId.trim()).maybeSingle();
+    if(!emp){attempts.current++;if(attempts.current>=3)setLocked(true);setErr('Invalid Employee ID or PIN.');setLoading(false);return;}
+    const{data:acc}=await sb.from('employee_portal_access').select('*').eq('employee_id',emp.id).maybeSingle();
+    if(!acc||!acc.is_active){setErr('Portal access not enabled. Contact HR.');setLoading(false);return;}
+    const h=await sha256(emp.id+pin);
+    if(h!==acc.pin_hash){attempts.current++;if(attempts.current>=3)setLocked(true);setErr('Invalid Employee ID or PIN.');setLoading(false);return;}
+    attempts.current=0;
+    await sb.from('employee_portal_access').update({last_login:new Date().toISOString()}).eq('id',acc.id);
+    onEmpLogin(emp.id,emp);setLoading(false);
+  };
+  const hk=e=>{if(e.key==='Enter')mode==='admin'?doAdmin():doEmp();};
+  return(<div className="login-wrap"><div className="login-box">
+    <div className="login-logo">ETERNA</div>
+    <div className="login-sub">HR & Payroll System</div>
+    <div className="login-tabs"><div className={`login-tab${mode==='admin'?' active':''}`} onClick={()=>{setMode('admin');setErr('');}}>HR Admin</div><div className={`login-tab${mode==='emp'?' active':''}`} onClick={()=>{setMode('emp');setErr('');}}>Employee Portal</div></div>
+    {locked&&<div className="login-lock">Too many failed attempts. Please contact HR.</div>}
+    {err&&<div className="login-err">{err}</div>}
+    {mode==='admin'?<>
+      <div className="form-group mb-16"><label>Username</label><input value={user} onChange={e=>setUser(e.target.value)} onKeyDown={hk} placeholder="Admin" autoFocus/></div>
+      <div className="form-group" style={{marginBottom:20}}><label>Password</label><input type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={hk} placeholder="••••••"/></div>
+      <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={doAdmin} disabled={loading}>{loading?<><span className="spinner"></span> Signing in…</>:'Sign In as Admin'}</button>
+    </>:<>
+      <div className="form-group mb-16"><label>Employee ID</label><input value={empId} onChange={e=>setEmpId(e.target.value)} onKeyDown={hk} placeholder="EMP-001" autoFocus/></div>
+      <div className="form-group" style={{marginBottom:20}}><label>PIN (6 digits)</label><input type="password" value={pin} onChange={e=>setPin(e.target.value)} onKeyDown={hk} placeholder="••••••" maxLength={6}/></div>
+      <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={doEmp} disabled={loading||locked}>{loading?<><span className="spinner"></span> Signing in…</>:'Sign In'}</button>
+      <div style={{marginTop:12,fontSize:12,color:'var(--ink-light)',textAlign:'center'}}>Forgot your PIN? Contact HR.</div>
+    </>}
+  </div></div>);
+}
+
+
+// ── APP ROOT ─────────────────────────────────────────────────────────────────
+function App(){
+  const[session,setSession]=useState(null);
+  const[tab,setTab]=useState('employees');
+  const[historyView,setHistoryView]=useState(null);
+  const[payslipData,setPayslipData]=useState(null);
+  const[pendingLeave,setPendingLeave]=useState(0);
+
+  useEffect(()=>{
+    if(session==='admin'){
+      (async()=>{const{count}=await sb.from('leave_requests').select('*',{count:'exact',head:true}).eq('status','pending');setPendingLeave(count||0);})();
+    } else setPendingLeave(0);
+  },[session,tab]);
+
+  if(!session) return <LoginScreen onAdminLogin={()=>setSession('admin')} onEmpLogin={(id,emp)=>setSession({empId:id,empData:emp})}/>;
+  if(session!=='admin') return <ESSPortal empId={session.empId} employeeData={session.empData} onLogout={()=>setSession(null)}/>;
+
   const nav=[
     {id:'employees',icon:'👥',label:'Employees'},
-    {id:'loans',    icon:'💳',label:'Loans'},
-    {id:'leave',    icon:'🏖️',label:'Leave'},
+    {id:'loans',icon:'💳',label:'Loans'},
+    {id:'leave',icon:'🏖️',label:'Leave',badge:pendingLeave},
     {id:'allowances',icon:'💰',label:'Allowances'},
     {id:'penalties',icon:'⚠️',label:'Penalty Types'},
-    {id:'run',      icon:'⚡',label:'Run Payroll'},
-    {id:'history',  icon:'📋',label:'History'},
+    {id:'run',icon:'⚡',label:'Run Payroll'},
+    {id:'history',icon:'📋',label:'History'},
+    {id:'access',icon:'🔐',label:'Access Control'},
+    {id:'settings',icon:'⚙️',label:'Settings'},
   ];
- 
-  const topTitle={
-    employees:'Employees',loans:'Loans',leave:'Leave Balances',
-    allowances:'Allowances',penalties:'Penalty Types',
-    run:'Run Payroll',
-    history: payslipData?'Payslip':historyView?'Payroll Register':'History'
-  };
- 
+
+  const titles={employees:'Employees',loans:'Loans',leave:'Leave',allowances:'Allowances',penalties:'Penalty Types',run:'Run Payroll',history:payslipData?'Payslip':historyView?'Payroll Register':'History',access:'Access Control',settings:'Settings'};
+
   const renderContent=()=>{
-    if(payslipData) return <PayslipView data={payslipData} onBack={()=>setPayslipData(null)} />;
-    if(tab==='employees') return <EmployeesTab />;
-    if(tab==='loans')     return <LoansTab />;
-    if(tab==='leave')     return <LeaveTab />;
-    if(tab==='allowances')return <AllowancesTab />;
-    if(tab==='penalties') return <PenaltyTypesTab />;
-    if(tab==='run')       return <RunPayrollTab onRunCreated={()=>{}} />;
-    if(tab==='history') {
-      if(historyView) return <RegisterView run={historyView} onBack={()=>{setHistoryView(null);setPayslipData(null);}} onViewPayslip={d=>{setPayslipData(d);}} />;
-      return <HistoryTab onViewRun={r=>setHistoryView(r)} />;
+    if(payslipData) return(
+      <div className="payslip-wrap">
+        <div className="flex mb-20" style={{justifyContent:'space-between'}}>
+          <button className="btn btn-secondary" onClick={()=>setPayslipData(null)}>← Back</button>
+          <button className="btn btn-primary" onClick={()=>window.print()}>🖨 Print / Save PDF</button>
+        </div>
+        <PayslipView data={payslipData} onBack={()=>setPayslipData(null)}/>
+      </div>
+    );
+    if(tab==='employees') return <EmployeesTab/>;
+    if(tab==='loans') return <LoansTab/>;
+    if(tab==='leave') return <LeaveTab/>;
+    if(tab==='allowances') return <AllowancesTab/>;
+    if(tab==='penalties') return <PenaltyTypesTab/>;
+    if(tab==='run') return <RunPayrollTab onRunCreated={()=>{}}/>;
+    if(tab==='history'){
+      if(historyView) return <RegisterView run={historyView} onBack={()=>{setHistoryView(null);setPayslipData(null);}} onViewPayslip={d=>setPayslipData(d)}/>;
+      return <HistoryTab onViewRun={r=>setHistoryView(r)}/>;
     }
+    if(tab==='access') return <AccessControlTab/>;
+    if(tab==='settings') return <SettingsTab/>;
   };
- 
-  return (
+
+  return(
     <div className="shell">
       <div className="sidebar">
         <div className="sidebar-logo">
           <div className="co">ETERNA</div>
           <div className="sub">Payroll System</div>
+          <div className="role">HR Admin</div>
         </div>
         <div className="nav">
           {nav.map(n=>(
             <div key={n.id} className={`nav-item${tab===n.id?' active':''}`}
               onClick={()=>{setTab(n.id);setHistoryView(null);setPayslipData(null);}}>
-              <span className="nav-icon">{n.icon}</span><span>{n.label}</span>
+              <span className="nav-icon">{n.icon}</span>
+              <span>{n.label}</span>
+              {(n.badge||0)>0&&<span className="nav-badge">{n.badge}</span>}
             </div>
           ))}
         </div>
-        <div className="sidebar-footer">Law 14/2025 · NOSI Jan 2026<br/>Law 7/2024 Income Tax</div>
+        <div className="sidebar-footer">
+          Law 14/2025 · NOSI Jan 2026<br/>Law 7/2024 Income Tax
+          <br/><button className="btn btn-sm" style={{background:'rgba(255,255,255,0.1)',color:'rgba(255,255,255,0.6)',border:'none',marginTop:8,width:'100%',justifyContent:'center'}} onClick={()=>setSession(null)}>Logout</button>
+        </div>
       </div>
       <div className="main">
         <div className="topbar">
-          <div className="topbar-title">{topTitle[tab]}</div>
+          <div className="topbar-title">{titles[tab]||''}</div>
           <div className="topbar-badge">Eterna Developments</div>
         </div>
         <div className="content">{renderContent()}</div>
@@ -2103,9 +2395,8 @@ function App() {
     </div>
   );
 }
- 
+
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
 </html>
- 
