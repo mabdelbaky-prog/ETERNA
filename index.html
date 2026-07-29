@@ -1947,8 +1947,27 @@ function RunPayrollTab({ onRunCreated }) {
       <div className="card mb-24">
         <div className="card-header">
           <div className="card-title">Payroll Preview — {mLabel(month)}</div>
-          <div className="flex">
-            <div className="alert alert-info" style={{margin:0,padding:'5px 10px',fontSize:12}}>Expand each employee to adjust OT, leave, penalties…</div>
+          <div className="flex" style={{alignItems:'flex-start',gap:12}}>
+            {flagged.length>0 ? (
+              <div className="alert alert-warn" style={{margin:0,padding:'8px 10px',fontSize:12,maxWidth:380}}>
+                <div style={{fontWeight:600,marginBottom:6}}>
+                  ⚠ {flagged.length} employee{flagged.length>1?'s':''} changed &gt;{varianceThreshold}% vs last run — acknowledge to finalize:
+                </div>
+                <label style={{display:'flex',alignItems:'center',gap:6,marginBottom:flagged.length?4:0,cursor:'pointer'}}>
+                  <input type="checkbox" checked={ackAll} onChange={e=>{setAckAll(e.target.checked);if(e.target.checked)setVarAcks({});}} />
+                  Acknowledge all
+                </label>
+                {!ackAll && flagged.map(l=>(
+                  <label key={l.employee_id} style={{display:'flex',alignItems:'center',gap:6,fontSize:12}}>
+                    <input type="checkbox" checked={!!varAcks[l.employee_id]}
+                      onChange={e=>setVarAcks(p=>({...p,[l.employee_id]:e.target.checked}))} />
+                    {l.name}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="alert alert-info" style={{margin:0,padding:'5px 10px',fontSize:12}}>Expand each employee to adjust OT, leave, penalties…</div>
+            )}
             <button className="btn btn-gold" onClick={finalize} disabled={saving||!canFinalize}>{saving?<><span className="spinner"></span> Saving…</>:'✔ Finalize & Save'}</button>
           </div>
         </div>
@@ -1972,7 +1991,12 @@ function RunPayrollTab({ onRunCreated }) {
                 return [
                   <tr key={l.employee_id} style={{background:isExpanded?'var(--maroon-faint)':''}}>
                     <td>
-                      <div style={{fontWeight:600}}>{l.name}</div>
+                      <div style={{fontWeight:600}}>
+                        {l.name}
+                        {flagged.some(f=>f.employee_id===l.employee_id) && (
+                          <span title={`Net changed >${varianceThreshold}% vs last run`} style={{color:'var(--warning,#b58900)',marginLeft:6,fontSize:12}}>⚠</span>
+                        )}
+                      </div>
                       <div style={{fontSize:11,color:'var(--ink-light)'}}>{l.emp_code} · {l.department}</div>
                     </td>
                     <td>{l.pro_rata_factor<1?<span className="pro-rata-badge">{fmtPct(l.pro_rata_factor)}</span>:<span className="text-muted" style={{fontSize:12}}>Full</span>}</td>
