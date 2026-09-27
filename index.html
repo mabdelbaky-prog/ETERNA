@@ -2658,7 +2658,11 @@ function RunPayrollTab({ onRunCreated }) {
                 ))}
               </div>
             ) : (
-              <div className="alert alert-info" style={{margin:0,padding:'5px 10px',fontSize:12}}>Expand each employee to adjust OT, leave, penalties…</div>
+              <div className="alert alert-info" style={{margin:0,padding:'5px 10px',fontSize:12}}>
+                Expand each employee to adjust OT, leave, penalties…
+                {Object.values(attRecs).some(ar=>ar.lateHours>0||ar.otHours>0||ar.absences>0) &&
+                  <> <span style={{color:'var(--maroon)'}}>🕒</span> next to a name means an attendance recommendation is waiting — expand that row to apply it.</>}
+              </div>
             )}
             <button className="btn btn-gold" onClick={finalize} disabled={saving||!canFinalize}>{saving?<><span className="spinner"></span> Saving…</>:'✔ Finalize & Save'}</button>
           </div>
@@ -2688,6 +2692,9 @@ function RunPayrollTab({ onRunCreated }) {
                         {flagged.some(f=>f.employee_id===l.employee_id) && (
                           <span title={`Net changed >${varianceThreshold}% vs last run`} style={{color:'var(--warning,#b58900)',marginLeft:6,fontSize:12}}>⚠</span>
                         )}
+                        {(()=>{const ar=attRecs[l.employee_id];return ar&&(ar.lateHours>0||ar.otHours>0||ar.absences>0)&&(
+                          <span title={`Attendance recommendation available: ${ar.lateHours>0?`${ar.lateHours}h late`:''}${ar.lateHours>0&&ar.otHours>0?', ':''}${ar.otHours>0?`${ar.otHours}h OT`:''}${ar.absences>0?` — ${ar.absences} absence(s)`:''}`} style={{color:'var(--maroon)',marginLeft:6,fontSize:12}}>🕒</span>
+                        );})()}
                       </div>
                       <div style={{fontSize:11,color:'var(--ink-light)'}}>{l.emp_code} · {l.department}</div>
                     </td>
