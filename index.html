@@ -1483,30 +1483,88 @@ function LeaveTypesSection(){
   </div>);
 }
 
-function LeaveRequestsSection({leaveTypes}){
+async function deductLeaveBalance(req, leaveTypes) {
+  const lt=leaveTypes.find(t=>t.id===req.leave_type_id);
+  if(lt&&(lt.deduction_source==='balance_annual'||lt.deduction_source==='balance_own')){
+    const yr=new Date(req.start_date).getFullYear();
+    const tbl=lt.deduction_source==='balance_annual'?'leave_balances':'leave_own_balances';
+    const q=lt.deduction_source==='balance_annual'
+      ?sb.from(tbl).select('*').eq('employee_id',req.employee_id).eq('year',yr).maybeSingle()
+      :sb.from(tbl).select('*').eq('employee_id',req.employee_id).eq('leave_type_id',req.leave_type_id).eq('year',yr).maybeSingle();
+    const{data:bal}=await q;
+    if(bal){
+      const newUsed=Number(bal.used_days)+Number(req.days_requested);
+      const newRem=Math.max(0,Number(bal.remaining_days)-Number(req.days_requested));
+      await sb.from(tbl).update({used_days:newUsed,remaining_days:newRem}).eq('id',bal.id);
+    }
+  }
+}
+
+async function findOverlap(employeeId, startDate, endDate, excludeId) {
+  let q=sb.from('leave_requests').select('start_date,end_date').eq('employee_id',employeeId).eq('status','approved');
+  if(excludeId) q=q.neq('id',excludeId);
+  const{data:existing}=await q;
+  return (existing||[]).find(r=>!(new Date(endDate)<new Date(r.start_date)||new Date(startDate)>new Date(r.end_date)));
+}
+
+const BLANK_ADD_LEAVE={employee_id:'',leave_type_id:'',start_date:'',end_date:'',reason:'',approve_now:true};
+
+function AddLeaveModal({ employees, leaveTypes, onClose, onSaved }){
+  const[form,setForm]=useState({...BLANK_ADD_LEAVE});
+  const[saving,setSaving]=useState(false);
+  const calcDays=(s,e,half)=>{if(!s||!e)return 0;const diff=(new Date(e)-new Date(s))/86400000+1;return half?Math.round(diff*2)/2:Math.round(diff);};
+  const lt=leaveTypes.find(t=>t.id===form.leave_type_id);
+  const days=lt?calcDays(form.start_date,form.end_date,lt.allow_half_days):0;
+  const save=async()=>{
+    if(!form.employee_id||!form.leave_type_id||!form.start_date||!form.end_date){toast.error('Employee, leave type, and dates are required.');return;}
+    if(days<=0){toast.error('Invalid dates.');return;}
+    if(lt.incident_cap>0&&days>lt.incident_cap&&!await confirmDialog(`This exceeds the ${lt.incident_cap}-day per-incident cap for ${lt.name}. Add anyway?`,{title:'Exceeds Cap',danger:true,confirmLabel:'Add Anyway'})) return;
+    setSaving(true);
+    const overlap=await findOverlap(form.employee_id,form.start_date,form.end_date,null);
+    if(overlap&&!await confirmDialog(`Overlaps with approved leave ${overlap.start_date}–${overlap.end_date}. Add anyway?`,{title:'Overlapping Leave',danger:true,confirmLabel:'Add Anyway'})){setSaving(false);return;}
+    const payload={employee_id:form.employee_id,leave_type_id:form.leave_type_id,start_date:form.start_date,end_date:form.end_date,days_requested:days,reason:form.reason||null,status:form.approve_now?'approved':'pending',reviewed_at:form.approve_now?new Date().toISOString():null};
+    const{data:inserted,error}=await dbWrite(sb.from('leave_requests').insert(payload).select().single());
+    if(error){setSaving(false);return;}
+    if(form.approve_now) await deductLeaveBalance(inserted,leaveTypes);
+    setSaving(false);
+    toast.success(form.approve_now?'Leave added and approved.':'Leave added as pending.');
+    onSaved();
+  };
+  return(<Modal title="Add Leave for Employee" onClose={onClose}
+    footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Add Leave'}</button></>}>
+    <div className="form-grid">
+      <div className="form-group"><label>Employee *</label>
+        <select value={form.employee_id} onChange={e=>setForm(p=>({...p,employee_id:e.target.value}))}>
+          <option value="">Select employee…</option>
+          {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+        </select>
+      </div>
+      <div className="form-group"><label>Leave Type *</label>
+        <select value={form.leave_type_id} onChange={e=>setForm(p=>({...p,leave_type_id:e.target.value}))}>
+          <option value="">Select type…</option>
+          {leaveTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </div>
+      <Field label="Start Date *" field="start_date" type="date" form={form} setForm={setForm}/>
+      <Field label="End Date *" field="end_date" type="date" form={form} setForm={setForm}/>
+      <div className="form-group full"><label>Reason / Note</label><input value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))}/></div>
+      {days>0&&<div className="form-group full" style={{fontSize:13,color:'var(--ink-light)'}}>{days} day(s)</div>}
+      <div className="form-group full"><label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type="checkbox" style={{width:'auto'}} checked={form.approve_now} onChange={e=>setForm(p=>({...p,approve_now:e.target.checked}))}/> Approve immediately (deducts balance now)</label></div>
+    </div>
+  </Modal>);
+}
+
+function LeaveRequestsSection({leaveTypes,employees}){
   const[requests,setRequests]=useState([]);const[loading,setLoading]=useState(true);const[filter,setFilter]=useState('pending');const[reviewModal,setReviewModal]=useState(null);const[hrNote,setHrNote]=useState('');const[saving,setSaving]=useState(false);
+  const[showAdd,setShowAdd]=useState(false);
   const[page,setPage]=useState(1);const PAGE_SIZE=25;
   const load=useCallback(async()=>{setLoading(true);const{data}=await sb.from('leave_requests').select('*,employees(full_name,emp_code),leave_types(name,requires_document)').order('created_at',{ascending:false});setRequests(data||[]);setLoading(false);},[]);
   useEffect(()=>{load();},[load]);
   const approve=async req=>{
     setSaving(true);
-    const{data:existing}=await sb.from('leave_requests').select('start_date,end_date').eq('employee_id',req.employee_id).eq('status','approved').neq('id',req.id);
-    const overlap=(existing||[]).find(r=>!(new Date(req.end_date)<new Date(r.start_date)||new Date(req.start_date)>new Date(r.end_date)));
+    const overlap=await findOverlap(req.employee_id,req.start_date,req.end_date,req.id);
     if(overlap&&!await confirmDialog(`Overlaps with approved leave ${overlap.start_date}–${overlap.end_date}. Approve anyway?`,{title:'Overlapping Leave',danger:true,confirmLabel:'Approve Anyway'})){setSaving(false);return;}
-    const lt=leaveTypes.find(t=>t.id===req.leave_type_id);
-    if(lt&&(lt.deduction_source==='balance_annual'||lt.deduction_source==='balance_own')){
-      const yr=new Date(req.start_date).getFullYear();
-      const tbl=lt.deduction_source==='balance_annual'?'leave_balances':'leave_own_balances';
-      const q=lt.deduction_source==='balance_annual'
-        ?sb.from(tbl).select('*').eq('employee_id',req.employee_id).eq('year',yr).maybeSingle()
-        :sb.from(tbl).select('*').eq('employee_id',req.employee_id).eq('leave_type_id',req.leave_type_id).eq('year',yr).maybeSingle();
-      const{data:bal}=await q;
-      if(bal){
-        const newUsed=Number(bal.used_days)+Number(req.days_requested);
-        const newRem=Math.max(0,Number(bal.remaining_days)-Number(req.days_requested));
-        await sb.from(tbl).update({used_days:newUsed,remaining_days:newRem}).eq('id',bal.id);
-      }
-    }
+    await deductLeaveBalance(req,leaveTypes);
     const {error} = await dbWrite(sb.from('leave_requests').update({status:'approved',hr_note:hrNote||null,reviewed_at:new Date().toISOString()}).eq('id',req.id));
     setSaving(false);
     if(error) return;
@@ -1529,6 +1587,7 @@ function LeaveRequestsSection({leaveTypes}){
     <div className="card-header">
       <div className="card-title">Leave Requests {pending>0&&<span className="nav-badge" style={{marginLeft:8,fontSize:11}}>{pending} pending</span>}</div>
       <div className="flex">
+        <button className="btn btn-primary btn-sm" onClick={()=>setShowAdd(true)}>+ Add Leave</button>
         <select value={filter} onChange={e=>setFilter(e.target.value)} style={{width:120}}>
           <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="all">All</option>
         </select>
@@ -1563,6 +1622,7 @@ function LeaveRequestsSection({leaveTypes}){
       {!reviewModal.document_url&&reviewModal.leave_types?.requires_document&&<div className="alert alert-warn">Employee has not uploaded a required document.</div>}
       <div className="form-group"><label>HR Note (visible to employee)</label><textarea value={hrNote} onChange={e=>setHrNote(e.target.value)} rows={2} placeholder="Optional note…" style={{resize:'vertical'}}/></div>
     </Modal>}
+    {showAdd&&<AddLeaveModal employees={employees} leaveTypes={leaveTypes} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);load();}}/>}
   </div>);
 }
 
@@ -1610,7 +1670,7 @@ function LeaveTab(){
   };
   return(<>
     <LeaveTypesSection/>
-    <LeaveRequestsSection leaveTypes={leaveTypes}/>
+    <LeaveRequestsSection leaveTypes={leaveTypes} employees={employees}/>
     <div className="card">
       <div className="card-header">
         <div className="card-title">Annual Leave Balances — {year}</div>
@@ -1852,6 +1912,312 @@ function PenaltyTypesTab() {
         </div>
       </div>
     </Modal>}
+  </>);
+}
+
+// ── ATTENDANCE ──────────────────────────────────────────────────────────────
+const ATT_ALIASES = {
+  emp_code: ['empid','employeeid','userid','badgenumber','empno','employeeno','id','no','cardno','staffid'],
+  name: ['name','employeename','fullname','username'],
+  date: ['date','attendancedate','day'],
+  check_in: ['firstin','checkin','timein','clockin','intime','in'],
+  check_out: ['lastout','checkout','timeout','clockout','outtime','out'],
+};
+const normHeader = h => String(h||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function resolveAttColumns(headers) {
+  const map = {};
+  for (const key of Object.keys(ATT_ALIASES)) {
+    const found = headers.find(h => ATT_ALIASES[key].includes(normHeader(h)));
+    if (found) map[key] = found;
+  }
+  return map;
+}
+function parseDateFlexible(v) {
+  if (!v && v !== 0) return null;
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (m) {
+    let [, a, b, y] = m;
+    if (y.length === 2) y = '20'+y;
+    let day = a, month = b;
+    if (Number(a) > 12) { day = a; month = b; } else if (Number(b) > 12) { day = b; month = a; }
+    return `${y}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d.toISOString().slice(0,10);
+}
+function parseTimeFlexible(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) return `${String(m[1]).padStart(2,'0')}:${m[2]}`;
+  m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])$/);
+  if (m) { let h = Number(m[1]) % 12; if (/p/i.test(m[4])) h += 12; return `${String(h).padStart(2,'0')}:${m[2]}`; }
+  const num = Number(s);
+  if (!isNaN(num) && num >= 0 && num < 2 && s !== '') {
+    const totalMin = Math.round(num * 24 * 60);
+    return `${String(Math.floor(totalMin/60)).padStart(2,'0')}:${String(totalMin%60).padStart(2,'0')}`;
+  }
+  return null;
+}
+function computeLateAndStatus(checkIn, shiftStart, graceMinutes) {
+  if (!checkIn) return { lateMinutes: 0, status: 'absent' };
+  const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+  const late = Math.max(0, toMin(checkIn) - (toMin(shiftStart) + Number(graceMinutes||0)));
+  return { lateMinutes: late, status: late > 0 ? 'late' : 'present' };
+}
+function parseAttendanceWorkbook(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array' });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  if (!raw.length) return { error: 'File has no data rows.' };
+  const headers = Object.keys(raw[0]);
+  const colMap = resolveAttColumns(headers);
+  if (!colMap.date) return { error: 'Could not find a Date column. Detected columns: '+headers.join(', ') };
+  if (!colMap.check_in) return { error: 'Could not find a First-in/Check-in column. Detected columns: '+headers.join(', ') };
+  if (!colMap.emp_code && !colMap.name) return { error: 'Could not find an Employee ID or Name column. Detected columns: '+headers.join(', ') };
+  return { rows: raw, colMap };
+}
+
+function AttendanceImportModal({ employees, settings, onClose, onImported }) {
+  const [step,setStep]=useState('idle');
+  const [rows,setRows]=useState([]);
+  const [importing,setImporting]=useState(false);
+  const [fileErr,setFileErr]=useState('');
+
+  const handleFile=(file)=>{
+    if(!file) return;
+    setFileErr('');
+    const reader=new FileReader();
+    reader.onload=(e)=>{
+      try{
+        const parsed=parseAttendanceWorkbook(e.target.result);
+        if(parsed.error){setFileErr(parsed.error);return;}
+        const shiftStart=settings.shift_start||'09:00';
+        const grace=Number(settings.grace_minutes||0);
+        const resolved=parsed.rows.map((r,idx)=>{
+          const rawCode=parsed.colMap.emp_code?String(r[parsed.colMap.emp_code]||'').trim():'';
+          const rawName=parsed.colMap.name?String(r[parsed.colMap.name]||'').trim():'';
+          let emp=null;
+          if(rawCode) emp=employees.find(e=>String(e.emp_code||'').toLowerCase()===rawCode.toLowerCase());
+          if(!emp&&rawName) emp=employees.find(e=>e.full_name.toLowerCase()===rawName.toLowerCase());
+          const date=parseDateFlexible(r[parsed.colMap.date]);
+          const checkIn=parseTimeFlexible(r[parsed.colMap.check_in]);
+          const checkOut=parsed.colMap.check_out?parseTimeFlexible(r[parsed.colMap.check_out]):null;
+          const errs=[];
+          if(!emp) errs.push(`No matching employee for "${rawCode||rawName||'—'}"`);
+          if(!date) errs.push('Invalid/unrecognized date');
+          const {lateMinutes,status}=computeLateAndStatus(checkIn,shiftStart,grace);
+          return {_row:idx+2,rawCode,rawName,employee_id:emp?.id,employee_label:emp?`${emp.emp_code} — ${emp.full_name}`:null,date,check_in:checkIn,check_out:checkOut,late_minutes:lateMinutes,status,errors:errs};
+        });
+        setRows(resolved);setStep('preview');
+      }catch(err){setFileErr('Could not read file: '+err.message);}
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const validRows=rows.filter(r=>r.errors.length===0);
+  const errorRows=rows.filter(r=>r.errors.length>0);
+
+  const confirmImport=async()=>{
+    if(!validRows.length){toast.error('No valid rows to import.');return;}
+    setImporting(true);
+    const payload=validRows.map(r=>({employee_id:r.employee_id,date:r.date,check_in:r.check_in,check_out:r.check_out,late_minutes:r.late_minutes,status:r.status,source:'zkteco_import',updated_at:new Date().toISOString()}));
+    const {error}=await dbWrite(sb.from('attendance_records').upsert(payload,{onConflict:'employee_id,date'}));
+    setImporting(false);
+    if(error) return;
+    toast.success(`Imported ${validRows.length} attendance record(s).`);
+    onImported();
+  };
+
+  return (
+    <Modal title="Import Attendance (ZKTeco)" lg onClose={onClose}
+      footer={step==='preview'?<>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={confirmImport} disabled={importing||!validRows.length}>{importing?<><span className="spinner"></span> Importing…</>:`Import ${validRows.length} Record(s)`}</button>
+      </>:null}>
+      {step==='idle'&&<>
+        <div className="alert alert-info" style={{marginBottom:14}}>Upload your ZKTeco export (.csv or .xlsx). Expected columns: Employee ID or Name, Date, First-in / Check-in, Last-out / Check-out (optional). Column names are matched flexibly.</div>
+        <input type="file" accept=".csv,.xlsx,.xls" onChange={e=>handleFile(e.target.files[0])}/>
+        {fileErr&&<div className="alert alert-danger" style={{marginTop:12}}>{fileErr}</div>}
+      </>}
+      {step==='preview'&&<>
+        <div className="flex" style={{gap:16,marginBottom:12,fontSize:13}}>
+          <span style={{color:'var(--success)',fontWeight:600}}>{validRows.length} ready</span>
+          {errorRows.length>0&&<span style={{color:'var(--danger)',fontWeight:600}}>{errorRows.length} will be skipped</span>}
+        </div>
+        <div className="tbl-wrap" style={{maxHeight:360,overflowY:'auto'}}>
+          <table>
+            <thead><tr><th>Row</th><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Late (min)</th><th>Status</th><th>Issue</th></tr></thead>
+            <tbody>
+              {rows.map(r=>(
+                <tr key={r._row} style={r.errors.length?{background:'var(--danger-bg)'}:{}}>
+                  <td>{r._row}</td>
+                  <td>{r.employee_label||<span style={{color:'var(--danger)'}}>{r.rawCode||r.rawName||'—'}</span>}</td>
+                  <td>{r.date||'—'}</td>
+                  <td>{r.check_in||'—'}</td>
+                  <td>{r.check_out||'—'}</td>
+                  <td>{r.late_minutes||0}</td>
+                  <td>{r.status}</td>
+                  <td style={{fontSize:11,color:'var(--danger)'}}>{r.errors.join('; ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>}
+    </Modal>
+  );
+}
+
+const BLANK_ATT={employee_id:'',date:today(),check_in:'',check_out:'',status:'present',note:''};
+
+function AttendanceEntryModal({ record, employees, settings, onClose, onSaved }) {
+  const[form,setForm]=useState(record?{...record}:{...BLANK_ATT});
+  const[saving,setSaving]=useState(false);
+  const save=async()=>{
+    if(!form.employee_id||!form.date){toast.error('Employee and date are required.');return;}
+    setSaving(true);
+    const shiftStart=settings.shift_start||'09:00';
+    const grace=Number(settings.grace_minutes||0);
+    const computed=form.check_in?computeLateAndStatus(form.check_in,shiftStart,grace):{lateMinutes:0,status:form.status||'absent'};
+    const payload={employee_id:form.employee_id,date:form.date,check_in:form.check_in||null,check_out:form.check_out||null,late_minutes:computed.lateMinutes,status:form.check_in?computed.status:(form.status||'absent'),source:'manual',note:form.note||null,updated_at:new Date().toISOString()};
+    const {error}=await dbWrite(sb.from('attendance_records').upsert(payload,{onConflict:'employee_id,date'}));
+    setSaving(false);
+    if(error) return;
+    toast.success('Attendance record saved.');
+    onSaved();
+  };
+  return(<Modal title={record?'Edit Attendance':'Add Attendance'} onClose={onClose}
+    footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Save'}</button></>}>
+    <div className="form-grid">
+      <div className="form-group"><label>Employee *</label>
+        <select value={form.employee_id} onChange={e=>setForm(p=>({...p,employee_id:e.target.value}))} disabled={!!record}>
+          <option value="">Select employee…</option>
+          {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+        </select>
+      </div>
+      <Field label="Date *" field="date" type="date" form={form} setForm={setForm} readOnly={!!record}/>
+      <Field label="Check In" field="check_in" type="time" form={form} setForm={setForm}/>
+      <Field label="Check Out" field="check_out" type="time" form={form} setForm={setForm}/>
+      <div className="form-group"><label>Status (used if no check-in)</label>
+        <select value={form.status||'present'} onChange={e=>setForm(p=>({...p,status:e.target.value}))}>
+          <option value="present">Present</option>
+          <option value="absent">Absent</option>
+          <option value="half_day">Half Day</option>
+        </select>
+      </div>
+      <div className="form-group full"><label>Note</label><input value={form.note||''} onChange={e=>setForm(p=>({...p,note:e.target.value}))}/></div>
+    </div>
+  </Modal>);
+}
+
+function AttendanceTab(){
+  const[records,setRecords]=useState([]);
+  const[employees,setEmployees]=useState([]);
+  const[settings,setSettings]=useState({shift_start:'09:00',shift_end:'17:00',grace_minutes:15});
+  const[loading,setLoading]=useState(true);
+  const[month,setMonth]=useState(today().slice(0,7));
+  const[empFilter,setEmpFilter]=useState('');
+  const[showImport,setShowImport]=useState(false);
+  const[editRecord,setEditRecord]=useState(null);
+  const[sort,setSort]=useState({key:'date',dir:'desc'});
+  const[page,setPage]=useState(1);
+  const PAGE_SIZE=25;
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const from=`${month}-01`;
+    const toDate=new Date(month+'-01'); toDate.setMonth(toDate.getMonth()+1);
+    const to=toDate.toISOString().slice(0,10);
+    const [{data:r},{data:e},{data:sets}]=await Promise.all([
+      sb.from('attendance_records').select('*,employees(full_name,emp_code)').gte('date',from).lt('date',to).order('date',{ascending:false}),
+      sb.from('employees').select('id,full_name,emp_code').eq('status','active').order('full_name'),
+      sb.from('settings').select('*'),
+    ]);
+    setRecords(r||[]);setEmployees(e||[]);
+    const setsMap={};(sets||[]).forEach(s=>setsMap[s.key]=s.value);
+    setSettings(p=>({...p,shift_start:setsMap.shift_start||p.shift_start,shift_end:setsMap.shift_end||p.shift_end,grace_minutes:setsMap.grace_minutes||p.grace_minutes}));
+    setLoading(false);
+  },[month]);
+  useEffect(()=>{load();},[load]);
+
+  const filtered=records.filter(r=>!empFilter||r.employee_id===empFilter);
+  const sorted=sortRows(filtered,sort);
+  const pageRows=paginate(sorted,page,PAGE_SIZE);
+  useEffect(()=>{setPage(1);},[empFilter,month,records.length]);
+
+  const counts={
+    present: records.filter(r=>r.status==='present').length,
+    late: records.filter(r=>r.status==='late').length,
+    absent: records.filter(r=>r.status==='absent').length,
+    half: records.filter(r=>r.status==='half_day').length,
+  };
+
+  const delRecord=async(r)=>{
+    if(!await confirmDialog(`Delete the attendance record for ${r.employees?.full_name} on ${r.date}?`,{title:'Delete Attendance Record',danger:true,confirmLabel:'Delete'})) return;
+    const {error}=await dbWrite(sb.from('attendance_records').delete().eq('id',r.id));
+    if(!error){toast.success('Record deleted.');load();}
+  };
+
+  return(<>
+    <div className="stats">
+      <div className="stat accent"><div className="stat-label">Present</div><div className="stat-value">{counts.present}</div></div>
+      <div className="stat gold"><div className="stat-label">Late</div><div className="stat-value">{counts.late}</div></div>
+      <div className="stat"><div className="stat-label">Absent (recorded)</div><div className="stat-value">{counts.absent}</div></div>
+      <div className="stat"><div className="stat-label">Half Day</div><div className="stat-value">{counts.half}</div></div>
+    </div>
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Attendance Records — {mLabel(month)}</div>
+        <div className="flex">
+          <input type="month" value={month} onChange={e=>setMonth(e.target.value)} style={{width:150}}/>
+          <select value={empFilter} onChange={e=>setEmpFilter(e.target.value)} style={{width:180}}>
+            <option value="">All employees</option>
+            {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+          </select>
+          <button className="btn btn-secondary" onClick={()=>setShowImport(true)}>⬆ Import (ZKTeco)</button>
+          <button className="btn btn-primary" onClick={()=>setEditRecord('add')}>+ Add Record</button>
+        </div>
+      </div>
+      <div className="tbl-wrap">
+        {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+        pageRows.length===0?<div className="empty"><div className="empty-icon">🕒</div><div className="empty-text">No attendance records for {mLabel(month)}.</div></div>:
+        <table>
+          <thead><tr>
+            <SortableTh label="Employee" sortKey="employees.full_name" sort={sort} setSort={setSort}/>
+            <SortableTh label="Date" sortKey="date" sort={sort} setSort={setSort}/>
+            <SortableTh label="Check In" sortKey="check_in" sort={sort} setSort={setSort}/>
+            <SortableTh label="Check Out" sortKey="check_out" sort={sort} setSort={setSort}/>
+            <SortableTh label="Late (min)" sortKey="late_minutes" sort={sort} setSort={setSort} className="tbl-num"/>
+            <SortableTh label="Status" sortKey="status" sort={sort} setSort={setSort}/>
+            <SortableTh label="Source" sortKey="source" sort={sort} setSort={setSort}/>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            {pageRows.map(r=>(
+              <tr key={r.id}>
+                <td style={{fontWeight:500}}>{r.employees?.full_name}<br/><span style={{fontSize:11,color:'var(--ink-light)'}}>{r.employees?.emp_code}</span></td>
+                <td>{r.date}</td>
+                <td>{r.check_in||'—'}</td>
+                <td>{r.check_out||'—'}</td>
+                <td className="tbl-num">{r.late_minutes||0}</td>
+                <td><span className={`badge badge-${r.status==='present'?'active':r.status==='late'?'draft':r.status==='absent'?'inactive':'active-loan'}`}>{r.status}</span></td>
+                <td style={{fontSize:11,color:'var(--ink-light)'}}>{r.source==='zkteco_import'?'Imported':r.source==='self_reported'?'Self-reported':'Manual'}</td>
+                <td><div className="flex">
+                  <button className="btn btn-secondary btn-sm" onClick={()=>setEditRecord(r)}>Edit</button>
+                  <button className="btn btn-sm btn-danger" onClick={()=>delRecord(r)}>Delete</button>
+                </div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+      <Pager page={page} setPage={setPage} total={sorted.length} pageSize={PAGE_SIZE}/>
+    </div>
+    {showImport&&<AttendanceImportModal employees={employees} settings={settings} onClose={()=>setShowImport(false)} onImported={()=>{setShowImport(false);load();}}/>}
+    {editRecord&&<AttendanceEntryModal record={editRecord==='add'?null:editRecord} employees={employees} settings={settings} onClose={()=>setEditRecord(null)} onSaved={()=>{setEditRecord(null);load();}}/>}
   </>);
 }
 
@@ -2961,9 +3327,10 @@ function SettingsTab(){
   const[settings,setS]=useState({});const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);const[saved,setSaved]=useState(false);
   const keys=['variance_threshold','company_name','hr_manager_name','general_manager_name','ot_multiplier'];
   const siKeys=['si_min','si_max','pers_ex'];
-  const labels={variance_threshold:'Variance Alert Threshold (%)',company_name:'Company Name',hr_manager_name:'HR Manager Name (Payslip Signature)',general_manager_name:'General Manager Name (Payslip Signature)',ot_multiplier:'OT Rate Multiplier (default 1.35×)',si_min:'Social Insurance Min. Wage (EGP/month)',si_max:'Social Insurance Max. Wage (EGP/month)',pers_ex:'Annual Personal Tax Exemption (EGP)'};
-  const defs={variance_threshold:'15',company_name:'Eterna Developments',hr_manager_name:'م. محمد عبدالباقي',general_manager_name:'المدير العام',ot_multiplier:'1.35',si_min:String(SI_DEFAULTS.si_min),si_max:String(SI_DEFAULTS.si_max),pers_ex:String(SI_DEFAULTS.pers_ex)};
-  const allKeys=[...keys,...siKeys];
+  const attKeys=['shift_start','shift_end','grace_minutes'];
+  const labels={variance_threshold:'Variance Alert Threshold (%)',company_name:'Company Name',hr_manager_name:'HR Manager Name (Payslip Signature)',general_manager_name:'General Manager Name (Payslip Signature)',ot_multiplier:'OT Rate Multiplier (default 1.35×)',si_min:'Social Insurance Min. Wage (EGP/month)',si_max:'Social Insurance Max. Wage (EGP/month)',pers_ex:'Annual Personal Tax Exemption (EGP)',shift_start:'Shift Start Time',shift_end:'Shift End Time',grace_minutes:'Grace Period (minutes)'};
+  const defs={variance_threshold:'15',company_name:'Eterna Developments',hr_manager_name:'م. محمد عبدالباقي',general_manager_name:'المدير العام',ot_multiplier:'1.35',si_min:String(SI_DEFAULTS.si_min),si_max:String(SI_DEFAULTS.si_max),pers_ex:String(SI_DEFAULTS.pers_ex),shift_start:'09:00',shift_end:'17:00',grace_minutes:'15'};
+  const allKeys=[...keys,...siKeys,...attKeys];
   useEffect(()=>{(async()=>{setLoading(true);const{data}=await sb.from('settings').select('*');const m={...defs};(data||[]).forEach(s=>m[s.key]=s.value);setS(m);applyPayrollSettings(m);setLoading(false);})();},[]);
   const save=async()=>{
     setSaving(true);
@@ -2981,6 +3348,12 @@ function SettingsTab(){
     <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4}}>
       <div style={{fontSize:12,fontWeight:600,color:'var(--ink-light)',textTransform:'uppercase',marginBottom:12}}>Social Insurance &amp; Tax (update each January per NOSI/ETA notices)</div>
       {siKeys.map(k=><div key={k} className="form-group" style={{marginBottom:12}}><label>{labels[k]}</label><input type="number" min="0" value={settings[k]??''} onChange={e=>setS(p=>({...p,[k]:e.target.value}))}/></div>)}
+    </div>
+    <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4}}>
+      <div style={{fontSize:12,fontWeight:600,color:'var(--ink-light)',textTransform:'uppercase',marginBottom:12}}>Attendance</div>
+      <div className="form-group" style={{marginBottom:12}}><label>{labels.shift_start}</label><input type="time" value={settings.shift_start??''} onChange={e=>setS(p=>({...p,shift_start:e.target.value}))}/></div>
+      <div className="form-group" style={{marginBottom:12}}><label>{labels.shift_end}</label><input type="time" value={settings.shift_end??''} onChange={e=>setS(p=>({...p,shift_end:e.target.value}))}/></div>
+      <div className="form-group" style={{marginBottom:12}}><label>{labels.grace_minutes}</label><input type="number" min="0" value={settings.grace_minutes??''} onChange={e=>setS(p=>({...p,grace_minutes:e.target.value}))}/></div>
     </div>
   </div><div className="alert alert-info" style={{marginTop:20,maxWidth:520}}>Settings apply on next payroll calculation. Changes don't affect finalized runs.</div></div></div>);
 }
@@ -3210,6 +3583,7 @@ function App(){
     {id:'employees',icon:'👥',label:'Employees'},
     {id:'loans',icon:'💳',label:'Loans'},
     {id:'leave',icon:'🏖️',label:'Leave',badge:pendingLeave},
+    {id:'attendance',icon:'🕒',label:'Attendance'},
     {id:'allowances',icon:'💰',label:'Allowances'},
     {id:'penalties',icon:'⚠️',label:'Penalty Types'},
     {id:'run',icon:'⚡',label:'Run Payroll'},
@@ -3218,7 +3592,7 @@ function App(){
     {id:'settings',icon:'⚙️',label:'Settings'},
   ];
 
-  const titles={employees:'Employees',loans:'Loans',leave:'Leave',allowances:'Allowances',penalties:'Penalty Types',run:'Run Payroll',history:payslipData?'Payslip':historyView?'Payroll Register':'History',access:'Access Control',settings:'Settings'};
+  const titles={employees:'Employees',loans:'Loans',leave:'Leave',attendance:'Attendance',allowances:'Allowances',penalties:'Penalty Types',run:'Run Payroll',history:payslipData?'Payslip':historyView?'Payroll Register':'History',access:'Access Control',settings:'Settings'};
 
   const renderContent=()=>{
     if(payslipData) return(
@@ -3233,6 +3607,7 @@ function App(){
     if(tab==='employees') return <EmployeesTab/>;
     if(tab==='loans') return <LoansTab/>;
     if(tab==='leave') return <LeaveTab/>;
+    if(tab==='attendance') return <AttendanceTab/>;
     if(tab==='allowances') return <AllowancesTab/>;
     if(tab==='penalties') return <PenaltyTypesTab/>;
     if(tab==='run') return <RunPayrollTab onRunCreated={()=>{}}/>;
