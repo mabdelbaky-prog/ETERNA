@@ -1483,30 +1483,88 @@ function LeaveTypesSection(){
   </div>);
 }
 
-function LeaveRequestsSection({leaveTypes}){
+async function deductLeaveBalance(req, leaveTypes) {
+  const lt=leaveTypes.find(t=>t.id===req.leave_type_id);
+  if(lt&&(lt.deduction_source==='balance_annual'||lt.deduction_source==='balance_own')){
+    const yr=new Date(req.start_date).getFullYear();
+    const tbl=lt.deduction_source==='balance_annual'?'leave_balances':'leave_own_balances';
+    const q=lt.deduction_source==='balance_annual'
+      ?sb.from(tbl).select('*').eq('employee_id',req.employee_id).eq('year',yr).maybeSingle()
+      :sb.from(tbl).select('*').eq('employee_id',req.employee_id).eq('leave_type_id',req.leave_type_id).eq('year',yr).maybeSingle();
+    const{data:bal}=await q;
+    if(bal){
+      const newUsed=Number(bal.used_days)+Number(req.days_requested);
+      const newRem=Math.max(0,Number(bal.remaining_days)-Number(req.days_requested));
+      await sb.from(tbl).update({used_days:newUsed,remaining_days:newRem}).eq('id',bal.id);
+    }
+  }
+}
+
+async function findOverlap(employeeId, startDate, endDate, excludeId) {
+  let q=sb.from('leave_requests').select('start_date,end_date').eq('employee_id',employeeId).eq('status','approved');
+  if(excludeId) q=q.neq('id',excludeId);
+  const{data:existing}=await q;
+  return (existing||[]).find(r=>!(new Date(endDate)<new Date(r.start_date)||new Date(startDate)>new Date(r.end_date)));
+}
+
+const BLANK_ADD_LEAVE={employee_id:'',leave_type_id:'',start_date:'',end_date:'',reason:'',approve_now:true};
+
+function AddLeaveModal({ employees, leaveTypes, onClose, onSaved }){
+  const[form,setForm]=useState({...BLANK_ADD_LEAVE});
+  const[saving,setSaving]=useState(false);
+  const calcDays=(s,e,half)=>{if(!s||!e)return 0;const diff=(new Date(e)-new Date(s))/86400000+1;return half?Math.round(diff*2)/2:Math.round(diff);};
+  const lt=leaveTypes.find(t=>t.id===form.leave_type_id);
+  const days=lt?calcDays(form.start_date,form.end_date,lt.allow_half_days):0;
+  const save=async()=>{
+    if(!form.employee_id||!form.leave_type_id||!form.start_date||!form.end_date){toast.error('Employee, leave type, and dates are required.');return;}
+    if(days<=0){toast.error('Invalid dates.');return;}
+    if(lt.incident_cap>0&&days>lt.incident_cap&&!await confirmDialog(`This exceeds the ${lt.incident_cap}-day per-incident cap for ${lt.name}. Add anyway?`,{title:'Exceeds Cap',danger:true,confirmLabel:'Add Anyway'})) return;
+    setSaving(true);
+    const overlap=await findOverlap(form.employee_id,form.start_date,form.end_date,null);
+    if(overlap&&!await confirmDialog(`Overlaps with approved leave ${overlap.start_date}–${overlap.end_date}. Add anyway?`,{title:'Overlapping Leave',danger:true,confirmLabel:'Add Anyway'})){setSaving(false);return;}
+    const payload={employee_id:form.employee_id,leave_type_id:form.leave_type_id,start_date:form.start_date,end_date:form.end_date,days_requested:days,reason:form.reason||null,status:form.approve_now?'approved':'pending',reviewed_at:form.approve_now?new Date().toISOString():null};
+    const{data:inserted,error}=await dbWrite(sb.from('leave_requests').insert(payload).select().single());
+    if(error){setSaving(false);return;}
+    if(form.approve_now) await deductLeaveBalance(inserted,leaveTypes);
+    setSaving(false);
+    toast.success(form.approve_now?'Leave added and approved.':'Leave added as pending.');
+    onSaved();
+  };
+  return(<Modal title="Add Leave for Employee" onClose={onClose}
+    footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:'Add Leave'}</button></>}>
+    <div className="form-grid">
+      <div className="form-group"><label>Employee *</label>
+        <select value={form.employee_id} onChange={e=>setForm(p=>({...p,employee_id:e.target.value}))}>
+          <option value="">Select employee…</option>
+          {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+        </select>
+      </div>
+      <div className="form-group"><label>Leave Type *</label>
+        <select value={form.leave_type_id} onChange={e=>setForm(p=>({...p,leave_type_id:e.target.value}))}>
+          <option value="">Select type…</option>
+          {leaveTypes.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </div>
+      <Field label="Start Date *" field="start_date" type="date" form={form} setForm={setForm}/>
+      <Field label="End Date *" field="end_date" type="date" form={form} setForm={setForm}/>
+      <div className="form-group full"><label>Reason / Note</label><input value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))}/></div>
+      {days>0&&<div className="form-group full" style={{fontSize:13,color:'var(--ink-light)'}}>{days} day(s)</div>}
+      <div className="form-group full"><label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}><input type="checkbox" style={{width:'auto'}} checked={form.approve_now} onChange={e=>setForm(p=>({...p,approve_now:e.target.checked}))}/> Approve immediately (deducts balance now)</label></div>
+    </div>
+  </Modal>);
+}
+
+function LeaveRequestsSection({leaveTypes,employees}){
   const[requests,setRequests]=useState([]);const[loading,setLoading]=useState(true);const[filter,setFilter]=useState('pending');const[reviewModal,setReviewModal]=useState(null);const[hrNote,setHrNote]=useState('');const[saving,setSaving]=useState(false);
+  const[showAdd,setShowAdd]=useState(false);
   const[page,setPage]=useState(1);const PAGE_SIZE=25;
   const load=useCallback(async()=>{setLoading(true);const{data}=await sb.from('leave_requests').select('*,employees(full_name,emp_code),leave_types(name,requires_document)').order('created_at',{ascending:false});setRequests(data||[]);setLoading(false);},[]);
   useEffect(()=>{load();},[load]);
   const approve=async req=>{
     setSaving(true);
-    const{data:existing}=await sb.from('leave_requests').select('start_date,end_date').eq('employee_id',req.employee_id).eq('status','approved').neq('id',req.id);
-    const overlap=(existing||[]).find(r=>!(new Date(req.end_date)<new Date(r.start_date)||new Date(req.start_date)>new Date(r.end_date)));
+    const overlap=await findOverlap(req.employee_id,req.start_date,req.end_date,req.id);
     if(overlap&&!await confirmDialog(`Overlaps with approved leave ${overlap.start_date}–${overlap.end_date}. Approve anyway?`,{title:'Overlapping Leave',danger:true,confirmLabel:'Approve Anyway'})){setSaving(false);return;}
-    const lt=leaveTypes.find(t=>t.id===req.leave_type_id);
-    if(lt&&(lt.deduction_source==='balance_annual'||lt.deduction_source==='balance_own')){
-      const yr=new Date(req.start_date).getFullYear();
-      const tbl=lt.deduction_source==='balance_annual'?'leave_balances':'leave_own_balances';
-      const q=lt.deduction_source==='balance_annual'
-        ?sb.from(tbl).select('*').eq('employee_id',req.employee_id).eq('year',yr).maybeSingle()
-        :sb.from(tbl).select('*').eq('employee_id',req.employee_id).eq('leave_type_id',req.leave_type_id).eq('year',yr).maybeSingle();
-      const{data:bal}=await q;
-      if(bal){
-        const newUsed=Number(bal.used_days)+Number(req.days_requested);
-        const newRem=Math.max(0,Number(bal.remaining_days)-Number(req.days_requested));
-        await sb.from(tbl).update({used_days:newUsed,remaining_days:newRem}).eq('id',bal.id);
-      }
-    }
+    await deductLeaveBalance(req,leaveTypes);
     const {error} = await dbWrite(sb.from('leave_requests').update({status:'approved',hr_note:hrNote||null,reviewed_at:new Date().toISOString()}).eq('id',req.id));
     setSaving(false);
     if(error) return;
@@ -1529,6 +1587,7 @@ function LeaveRequestsSection({leaveTypes}){
     <div className="card-header">
       <div className="card-title">Leave Requests {pending>0&&<span className="nav-badge" style={{marginLeft:8,fontSize:11}}>{pending} pending</span>}</div>
       <div className="flex">
+        <button className="btn btn-primary btn-sm" onClick={()=>setShowAdd(true)}>+ Add Leave</button>
         <select value={filter} onChange={e=>setFilter(e.target.value)} style={{width:120}}>
           <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="all">All</option>
         </select>
@@ -1563,6 +1622,7 @@ function LeaveRequestsSection({leaveTypes}){
       {!reviewModal.document_url&&reviewModal.leave_types?.requires_document&&<div className="alert alert-warn">Employee has not uploaded a required document.</div>}
       <div className="form-group"><label>HR Note (visible to employee)</label><textarea value={hrNote} onChange={e=>setHrNote(e.target.value)} rows={2} placeholder="Optional note…" style={{resize:'vertical'}}/></div>
     </Modal>}
+    {showAdd&&<AddLeaveModal employees={employees} leaveTypes={leaveTypes} onClose={()=>setShowAdd(false)} onSaved={()=>{setShowAdd(false);load();}}/>}
   </div>);
 }
 
@@ -1610,7 +1670,7 @@ function LeaveTab(){
   };
   return(<>
     <LeaveTypesSection/>
-    <LeaveRequestsSection leaveTypes={leaveTypes}/>
+    <LeaveRequestsSection leaveTypes={leaveTypes} employees={employees}/>
     <div className="card">
       <div className="card-header">
         <div className="card-title">Annual Leave Balances — {year}</div>
