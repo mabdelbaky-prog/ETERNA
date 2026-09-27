@@ -2222,16 +2222,32 @@ function AttendanceTab(){
 }
 
 // ── RUN PAYROLL TAB ───────────────────────────────────────────────────────────
-function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
+function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal, attRec }) {
   const gross   = grossUp(emp.target_net);
   const hourly  = gross / 26 / 8;
   const daily   = gross / 30;
   const otRate  = hourly * 1.35;
 
   const u = (field, val) => onChange({ ...adj, [field]: val });
+  const hasAttRec = attRec && (attRec.lateHours>0 || attRec.otHours>0 || attRec.absences>0);
 
   return (
     <div className="adj-panel">
+      {hasAttRec && (
+        <div style={{background:'var(--maroon-faint)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 12px',marginBottom:12}}>
+          <div className="section-title">Attendance Recommendation ({attRec.recordCount} record(s) this period)</div>
+          <div style={{fontSize:12,marginBottom:8,display:'flex',gap:14,flexWrap:'wrap'}}>
+            {attRec.lateHours>0&&<span>Late: <strong>{attRec.lateHours}h</strong></span>}
+            {attRec.otHours>0&&<span>OT: <strong>{attRec.otHours}h</strong></span>}
+            {attRec.absences>0&&<span style={{color:'var(--danger)'}}>⚠ {attRec.absences} unexplained absence(s) — apply a penalty or leave deduction manually</span>}
+          </div>
+          {(attRec.lateHours>0||attRec.otHours>0)&&
+            <button className="btn btn-secondary btn-sm" onClick={()=>onChange({...adj,
+              ...(attRec.lateHours>0?{late_hours:attRec.lateHours}:{}),
+              ...(attRec.otHours>0?{ot_hours:attRec.otHours}:{}),
+            })}>Apply to Lateness/OT</button>}
+        </div>
+      )}
       <div className="adj-grid" style={{ display:'grid', gap:12 }}>
 
         {/* OT */}
@@ -2395,11 +2411,15 @@ function RunPayrollTab({ onRunCreated }) {
   const [calculating,setCalculating]=useState(false);
   const [saving,setSaving]=useState(false);
   const [msg,setMsg]=useState(null);
+  const [attRecs,setAttRecs]=useState({});
 
   const calculate=async()=>{
     setCalculating(true);setMsg(null);setPreview(null);setVarAcks({});setAckAll(false);
     const year=new Date(closing).getFullYear();
-    const [{data:emps},{data:ls},{data:lbs},{data:fa},{data:pt},{data:sets},{data:prevRun}]=await Promise.all([
+    const attFrom=`${month}-01`;
+    const attToDate=new Date(month+'-01'); attToDate.setMonth(attToDate.getMonth()+1);
+    const attTo=attToDate.toISOString().slice(0,10);
+    const [{data:emps},{data:ls},{data:lbs},{data:fa},{data:pt},{data:sets},{data:prevRun},{data:attRows}]=await Promise.all([
       sb.from('employees').select('*').eq('status','active'),
       sb.from('loans').select('*').eq('status','active'),
       sb.from('leave_balances').select('*').eq('year',year),
@@ -2407,6 +2427,7 @@ function RunPayrollTab({ onRunCreated }) {
       sb.from('penalty_types').select('*').order('name'),
       sb.from('settings').select('*'),
       sb.from('payroll_runs').select('id').eq('status','finalized').order('closing_date',{ascending:false}).limit(1),
+      sb.from('attendance_records').select('*').gte('date',attFrom).lt('date',attTo),
     ]);
     if(!emps||emps.length===0){setMsg({type:'danger',text:'No active employees.'});setCalculating(false);return;}
     const{data:existingRun}=await sb.from('payroll_runs').select('id,status').eq('month',month).neq('status','void').maybeSingle();
@@ -2417,6 +2438,20 @@ function RunPayrollTab({ onRunCreated }) {
     const setsMap={};(sets||[]).forEach(s=>setsMap[s.key]=s.value);
     const vt=Number(setsMap.variance_threshold||15);setVarianceThreshold(vt);
     applyPayrollSettings(setsMap);
+    const shiftEnd=setsMap.shift_end||'17:00';
+    const toMin=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m;};
+    const attByEmp={};
+    (attRows||[]).forEach(r=>{if(!attByEmp[r.employee_id])attByEmp[r.employee_id]=[];attByEmp[r.employee_id].push(r);});
+    const attRecsMap={};
+    emps.forEach(emp=>{
+      const recs=attByEmp[emp.id]||[];
+      const lateMin=recs.reduce((s,r)=>s+Number(r.late_minutes||0),0);
+      let otMin=0;
+      recs.forEach(r=>{ if(r.check_out){ const extra=toMin(r.check_out)-toMin(shiftEnd); if(extra>0) otMin+=extra; } });
+      const absences=recs.filter(r=>r.status==='absent').length;
+      attRecsMap[emp.id]={ lateHours:Math.round(lateMin/60*100)/100, otHours:Math.round(otMin/60*100)/100, absences, recordCount:recs.length };
+    });
+    setAttRecs(attRecsMap);
     let prevLinesData=[];
     if(prevRun&&prevRun.length>0){const{data:pl}=await sb.from('payroll_lines').select('employee_id,dispensed_net').eq('run_id',prevRun[0].id);prevLinesData=pl||[];}
     setPrevLines(prevLinesData);
@@ -2646,7 +2681,7 @@ function RunPayrollTab({ onRunCreated }) {
                   isExpanded&&<tr key={l.employee_id+'-adj'}>
                     <td colSpan={8} style={{padding:'0 12px 12px'}}>
                       <AdjPanel emp={emp} adj={adjs[l.employee_id]||{}} onChange={a=>updateAdj(l.employee_id,a)}
-                        loans={empLoans} penaltyTypes={penaltyTypes} leaveBal={leaveBal} />
+                        loans={empLoans} penaltyTypes={penaltyTypes} leaveBal={leaveBal} attRec={attRecs[l.employee_id]} />
                     </td>
                   </tr>
                 ];
