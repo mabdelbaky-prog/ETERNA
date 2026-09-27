@@ -431,12 +431,29 @@ input:focus,select:focus,textarea:focus{border-color:var(--maroon);box-shadow:0 
 .text-danger{color:var(--danger);}
 .pro-rata-badge{background:var(--gold-light);color:#7a5c00;font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px;}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+
+.toast-host{position:fixed;top:16px;right:16px;z-index:300;display:flex;flex-direction:column;gap:8px;max-width:360px;}
+.toast{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.12);animation:toast-in .18s ease-out;}
+.toast span{flex:1;}
+.toast-close{background:none;border:none;cursor:pointer;font-size:16px;line-height:1;color:inherit;opacity:0.6;padding:0;}
+.toast-close:hover{opacity:1;}
+.toast-success{background:var(--success);color:#fff;}
+.toast-danger{background:var(--danger);color:#fff;}
+.toast-warn{background:#b58900;color:#fff;}
+.toast-info{background:var(--maroon);color:#fff;}
+@keyframes toast-in{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+@media (max-width:600px){.toast-host{left:16px;right:16px;max-width:none;top:auto;bottom:16px;}}
+
+.pager{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--ink-light);}
+.pager-btns{display:flex;align-items:center;gap:6px;}
+.pager-page{font-size:12px;color:var(--ink-light);padding:0 4px;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--maroon);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--maroon-faint);}
 .info-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;}
 .info-row:last-child{border-bottom:none;}
 .adj-panel{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px;margin-top:8px;}
 .adj-section{margin-bottom:14px;}
+.adj-grid{grid-template-columns:1fr 1fr 1fr;}
 .adj-section:last-child{margin-bottom:0;}
 
 /* payslip */
@@ -490,6 +507,37 @@ input:focus,select:focus,textarea:focus{border-color:var(--maroon);box-shadow:0 
 .toggle-opt{flex:1;padding:5px;text-align:center;font-size:11px;font-weight:600;cursor:pointer;background:var(--bg);color:var(--ink-light);}
 .toggle-opt.active{background:#8B1A2E;color:#fff;}
 .ps-leave-note{background:#EBF4FF;border-radius:6px;padding:8px 12px;margin-top:8px;font-size:12px;color:#1E4E8C;}
+
+.hamburger-btn{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink);padding:4px 8px;margin-right:4px;}
+.sidebar-backdrop{display:none;}
+
+/* ── Responsive (tablet & phone) ─────────────────────────────────────────── */
+@media (max-width:900px){
+  .stats{grid-template-columns:repeat(2,1fr);}
+  .form-grid,.form-grid-3,.adj-grid{grid-template-columns:1fr 1fr;}
+}
+@media (max-width:768px){
+  .hamburger-btn{display:inline-flex;}
+  .sidebar{position:fixed;top:0;left:0;height:100vh;z-index:210;transform:translateX(-100%);transition:transform .2s ease;box-shadow:4px 0 24px rgba(0,0,0,0.2);}
+  .sidebar.open{transform:translateX(0);}
+  .sidebar-backdrop{display:block;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:205;}
+}
+@media (max-width:600px){
+  .content{padding:14px;}
+  .topbar{padding:0 14px;}
+  .topbar-badge{display:none;}
+  .stats{grid-template-columns:1fr 1fr;gap:10px;}
+  .stat{padding:12px 14px;}
+  .stat-value{font-size:18px;}
+  .form-grid,.form-grid-3,.adj-grid{grid-template-columns:1fr;}
+  .modal{width:calc(100vw - 24px);max-height:calc(100vh - 24px);}
+  .card-header{flex-wrap:wrap;gap:8px;}
+  .login-box{width:calc(100vw - 32px);padding:32px 24px;}
+  .ess-topbar,.ess-content{padding-left:16px;padding-right:16px;}
+  .ess-nav{padding-left:16px;padding-right:16px;overflow-x:auto;}
+  .ess-nav-item{white-space:nowrap;}
+  .pager{flex-direction:column;align-items:flex-start;}
+}
 </style>
 </head>
 <body>
@@ -686,6 +734,59 @@ const fmtPct = n => (n*100).toFixed(1)+'%';
 const today  = () => new Date().toISOString().slice(0,10);
 const mLabel = s => { if(!s) return ''; const d=new Date(s+'-01'); return d.toLocaleString('en',{month:'long',year:'numeric'}); };
 
+// ── SORTING / PAGINATION HELPERS ───────────────────────────────────────────────
+function sortRows(rows, sort) {
+  if (!sort || !sort.key) return rows;
+  const { key, dir } = sort;
+  const get = (r) => key.split('.').reduce((o,k)=>o?.[k], r);
+  const sorted = [...rows].sort((a,b) => {
+    let av = get(a), bv = get(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return dir === 'desc' ? 1 : -1;
+    if (av > bv) return dir === 'desc' ? -1 : 1;
+    return 0;
+  });
+  return sorted;
+}
+
+function SortableTh({ label, sortKey, sort, setSort, className }) {
+  const active = sort?.key === sortKey;
+  const toggle = () => setSort(active ? { key: sortKey, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key: sortKey, dir: 'asc' });
+  return (
+    <th className={className} onClick={toggle} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      {label}<span style={{ marginLeft: 3, opacity: active ? 1 : 0.25, fontSize: 10 }}>{active ? (sort.dir === 'asc' ? '▲' : '▼') : '▲'}</span>
+    </th>
+  );
+}
+
+function Pager({ page, setPage, total, pageSize }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages <= 1) return null;
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(total, page * pageSize);
+  return (
+    <div className="pager">
+      <span className="pager-info">{from}–{to} of {total}</span>
+      <div className="pager-btns">
+        <button className="btn btn-secondary btn-sm" disabled={page<=1} onClick={()=>setPage(1)}>«</button>
+        <button className="btn btn-secondary btn-sm" disabled={page<=1} onClick={()=>setPage(p=>p-1)}>‹ Prev</button>
+        <span className="pager-page">Page {page} / {pages}</span>
+        <button className="btn btn-secondary btn-sm" disabled={page>=pages} onClick={()=>setPage(p=>p+1)}>Next ›</button>
+        <button className="btn btn-secondary btn-sm" disabled={page>=pages} onClick={()=>setPage(pages)}>»</button>
+      </div>
+    </div>
+  );
+}
+
+function paginate(rows, page, pageSize) {
+  const start = (page - 1) * pageSize;
+  return rows.slice(start, start + pageSize);
+}
+
 // Employee ID generator: EMP-001 format
 function nextEmpCode(employees) {
   const nums = employees
@@ -695,6 +796,69 @@ function nextEmpCode(employees) {
     .filter(n => !isNaN(n));
   const max = nums.length ? Math.max(...nums) : 0;
   return 'EMP-' + String(max + 1).padStart(3, '0');
+}
+
+// ── TOAST / CONFIRM (replaces alert()/confirm() app-wide) ─────────────────────
+let _toastPush = null;
+function toast(type, message) { if (_toastPush) _toastPush({ id: Date.now()+Math.random(), type, message }); }
+toast.success = m => toast('success', m);
+toast.error   = m => toast('danger', m);
+toast.warn    = m => toast('warn', m);
+toast.info    = m => toast('info', m);
+
+// Awaits a Supabase query builder, toasts on failure so writes never fail silently.
+async function dbWrite(promiseLike) {
+  const { error } = await promiseLike;
+  if (error) toast.error(error.message || 'Something went wrong saving. Please try again.');
+  return { error };
+}
+
+function ToastHost() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    _toastPush = (t) => {
+      setItems(p => [...p, t]);
+      setTimeout(() => setItems(p => p.filter(x => x.id !== t.id)), 4500);
+    };
+    return () => { _toastPush = null; };
+  }, []);
+  if (!items.length) return null;
+  return (
+    <div className="toast-host">
+      {items.map(t => (
+        <div key={t.id} className={`toast toast-${t.type}`}>
+          <span>{t.message}</span>
+          <button className="toast-close" onClick={() => setItems(p => p.filter(x => x.id !== t.id))}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+let _confirmOpen = null;
+function confirmDialog(message, opts = {}) {
+  return new Promise(resolve => {
+    if (_confirmOpen) _confirmOpen({ message, ...opts, resolve });
+    else resolve(window.confirm(message));
+  });
+}
+function ConfirmHost() {
+  const [state, setState] = useState(null);
+  useEffect(() => {
+    _confirmOpen = (s) => setState(s);
+    return () => { _confirmOpen = null; };
+  }, []);
+  if (!state) return null;
+  const close = (result) => { const r = state.resolve; setState(null); r(result); };
+  return (
+    <Modal title={state.title || 'Confirm'} onClose={() => close(false)}
+      footer={<>
+        <button className="btn btn-secondary" onClick={() => close(false)}>Cancel</button>
+        <button className={`btn ${state.danger ? 'btn-danger' : 'btn-primary'}`} onClick={() => close(true)}>{state.confirmLabel || 'Confirm'}</button>
+      </>}>
+      <div style={{ fontSize: 14, lineHeight: 1.5 }}>{state.message}</div>
+    </Modal>
+  );
 }
 
 // ── SHARED COMPONENTS ─────────────────────────────────────────────────────────
@@ -815,9 +979,9 @@ function BulkModal({ onClose, onDone, employees }) {
   const fileRef=useRef(null);
 
   const handleFile = file => {
-    if(!file||!file.name.endsWith('.csv')){alert('Please upload a .csv file.');return;}
+    if(!file||!file.name.endsWith('.csv')){toast.error('Please upload a .csv file.');return;}
     const r=new FileReader();
-    r.onload=e=>{const res=parseCSV(e.target.result);if(res.error){alert(res.error);return;}setParsed(res);setStep('preview');};
+    r.onload=e=>{const res=parseCSV(e.target.result);if(res.error){toast.error(res.error);return;}setParsed(res);setStep('preview');};
     r.readAsText(file);
   };
 
@@ -992,6 +1156,9 @@ function EmployeesTab() {
   const [form,setForm]=useState({...BLANK_EMP});
   const [showBulk,setShowBulk]=useState(false);
   const [assigning,setAssigning]=useState(false);
+  const [sort,setSort]=useState({key:'full_name',dir:'asc'});
+  const [page,setPage]=useState(1);
+  const PAGE_SIZE=25;
 
   const load = useCallback(async()=>{
     setLoading(true);
@@ -1011,27 +1178,28 @@ function EmployeesTab() {
   const closeModal=()=>setModal(null);
 
   const save = async()=>{
-    if(!form.full_name||!form.hire_date||!form.target_net){alert('Name, hire date, and target net are required.');return;}
+    if(!form.full_name||!form.hire_date||!form.target_net){toast.error('Name, hire date, and target net are required.');return;}
     setSaving(true);
-    if(modal==='add'){
-      await sb.from('employees').insert({...form,target_net:Number(form.target_net)});
-    } else {
-      await sb.from('employees').update({...form,target_net:Number(form.target_net)}).eq('id',modal.id);
-    }
-    setSaving(false);setModal(null);load();
+    const {error} = modal==='add'
+      ? await dbWrite(sb.from('employees').insert({...form,target_net:Number(form.target_net)}))
+      : await dbWrite(sb.from('employees').update({...form,target_net:Number(form.target_net)}).eq('id',modal.id));
+    setSaving(false);
+    if(error) return;
+    toast.success(modal==='add'?'Employee added.':'Employee updated.');
+    setModal(null);load();
   };
 
   const toggle=async(emp)=>{
-    await sb.from('employees').update({status:emp.status==='active'?'inactive':'active'}).eq('id',emp.id);
-    load();
+    const {error} = await dbWrite(sb.from('employees').update({status:emp.status==='active'?'inactive':'active'}).eq('id',emp.id));
+    if(!error) load();
   };
 
   const doAssignCodes = async()=>{
     setAssigning(true);
     const n = await assignMissingEmpCodes(employees);
     setAssigning(false);
-    if(n>0){alert(`${n} employee(s) assigned new IDs.`);load();}
-    else alert('All employees already have IDs.');
+    if(n>0){toast.success(`${n} employee(s) assigned new IDs.`);load();}
+    else toast.info('All employees already have IDs.');
   };
 
   const filtered=employees.filter(e=>
@@ -1039,6 +1207,9 @@ function EmployeesTab() {
     (e.department||'').toLowerCase().includes(search.toLowerCase())||
     (e.emp_code||'').toLowerCase().includes(search.toLowerCase())
   );
+  const sorted=sortRows(filtered,sort);
+  const pageRows=paginate(sorted,page,PAGE_SIZE);
+  useEffect(()=>{setPage(1);},[search,employees.length]);
   const active=employees.filter(e=>e.status==='active').length;
   const missingCodes=employees.filter(e=>!e.emp_code).length;
 
@@ -1070,9 +1241,18 @@ function EmployeesTab() {
         {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
         filtered.length===0?<div className="empty"><div className="empty-icon">👤</div><div className="empty-text">No employees found.</div></div>:
         <table>
-          <thead><tr><th>ID</th><th>Name</th><th>National ID</th><th>Department</th><th>Job Title</th><th>Hire Date</th><th className="tbl-num">Target Net</th><th>Bank</th><th>Status</th><th></th></tr></thead>
+          <thead><tr>
+            <SortableTh label="ID" sortKey="emp_code" sort={sort} setSort={setSort}/>
+            <SortableTh label="Name" sortKey="full_name" sort={sort} setSort={setSort}/>
+            <SortableTh label="National ID" sortKey="national_id" sort={sort} setSort={setSort}/>
+            <SortableTh label="Department" sortKey="department" sort={sort} setSort={setSort}/>
+            <SortableTh label="Job Title" sortKey="job_title" sort={sort} setSort={setSort}/>
+            <SortableTh label="Hire Date" sortKey="hire_date" sort={sort} setSort={setSort}/>
+            <SortableTh label="Target Net" sortKey="target_net" sort={sort} setSort={setSort} className="tbl-num"/>
+            <th>Bank</th><SortableTh label="Status" sortKey="status" sort={sort} setSort={setSort}/><th></th>
+          </tr></thead>
           <tbody>
-            {filtered.map(emp=>(
+            {pageRows.map(emp=>(
               <tr key={emp.id}>
                 <td><span style={{fontFamily:'monospace',fontWeight:600,color:'var(--maroon)',fontSize:12}}>{emp.emp_code||<span style={{color:'var(--ink-light)'}}>—</span>}</span></td>
                 <td style={{fontWeight:500}}>{emp.full_name}</td>
@@ -1094,6 +1274,7 @@ function EmployeesTab() {
           </tbody>
         </table>}
       </div>
+      <Pager page={page} setPage={setPage} total={sorted.length} pageSize={PAGE_SIZE}/>
     </div>
 
     {showBulk&&<BulkModal onClose={()=>setShowBulk(false)} onDone={load} employees={employees} />}
@@ -1112,6 +1293,9 @@ function LoansTab() {
   const [form,setForm]=useState({...BLANK_LOAN});
   const [saving,setSaving]=useState(false);
   const [filter,setFilter]=useState('active');
+  const [sort,setSort]=useState({key:'date_issued',dir:'desc'});
+  const [page,setPage]=useState(1);
+  const PAGE_SIZE=25;
 
   const load=useCallback(async()=>{
     setLoading(true);
@@ -1125,7 +1309,7 @@ function LoansTab() {
   useEffect(()=>{load();},[load]);
 
   const save=async()=>{
-    if(!form.employee_id||!form.amount||!form.monthly_deduction){alert('Employee, amount, and monthly deduction are required.');return;}
+    if(!form.employee_id||!form.amount||!form.monthly_deduction){toast.error('Employee, amount, and monthly deduction are required.');return;}
     setSaving(true);
     const payload={
       employee_id:form.employee_id,
@@ -1136,18 +1320,23 @@ function LoansTab() {
       remaining_balance:modal==='add'?Number(form.amount):(form.remaining_balance!==undefined?Number(form.remaining_balance):Number(form.amount)),
       status:'active',
     };
-    if(modal==='add') await sb.from('loans').insert(payload);
-    else await sb.from('loans').update(payload).eq('id',modal.id);
-    setSaving(false);setModal(null);load();
+    const {error} = modal==='add' ? await dbWrite(sb.from('loans').insert(payload)) : await dbWrite(sb.from('loans').update(payload).eq('id',modal.id));
+    setSaving(false);
+    if(error) return;
+    toast.success(modal==='add'?'Loan created.':'Loan updated.');
+    setModal(null);load();
   };
 
   const settle=async(loan)=>{
-    if(!confirm('Mark this loan as settled?')) return;
-    await sb.from('loans').update({status:'settled',remaining_balance:0}).eq('id',loan.id);
-    load();
+    if(!await confirmDialog('Mark this loan as settled?',{title:'Settle Loan',confirmLabel:'Settle'})) return;
+    const {error} = await dbWrite(sb.from('loans').update({status:'settled',remaining_balance:0}).eq('id',loan.id));
+    if(!error){toast.success('Loan settled.');load();}
   };
 
   const filtered=loans.filter(l=>filter==='all'||l.status===filter);
+  const sorted=sortRows(filtered,sort);
+  const pageRows=paginate(sorted,page,PAGE_SIZE);
+  useEffect(()=>{setPage(1);},[filter,loans.length]);
   const totalOut=loans.filter(l=>l.status==='active').reduce((s,l)=>s+(l.remaining_balance||0),0);
 
   return (<>
@@ -1174,9 +1363,18 @@ function LoansTab() {
         {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
         filtered.length===0?<div className="empty"><div className="empty-icon">💳</div><div className="empty-text">No loans found.</div></div>:
         <table>
-          <thead><tr><th>Employee</th><th>Reason</th><th>Date Issued</th><th className="tbl-num">Loan Amount</th><th className="tbl-num">Monthly Ded.</th><th className="tbl-num">Remaining</th><th>Status</th><th></th></tr></thead>
+          <thead><tr>
+            <SortableTh label="Employee" sortKey="employees.full_name" sort={sort} setSort={setSort}/>
+            <th>Reason</th>
+            <SortableTh label="Date Issued" sortKey="date_issued" sort={sort} setSort={setSort}/>
+            <SortableTh label="Loan Amount" sortKey="amount" sort={sort} setSort={setSort} className="tbl-num"/>
+            <SortableTh label="Monthly Ded." sortKey="monthly_deduction" sort={sort} setSort={setSort} className="tbl-num"/>
+            <SortableTh label="Remaining" sortKey="remaining_balance" sort={sort} setSort={setSort} className="tbl-num"/>
+            <SortableTh label="Status" sortKey="status" sort={sort} setSort={setSort}/>
+            <th></th>
+          </tr></thead>
           <tbody>
-            {filtered.map(l=>(
+            {pageRows.map(l=>(
               <tr key={l.id}>
                 <td style={{fontWeight:500}}>{l.employees?.full_name}<br/><span style={{fontSize:11,color:'var(--ink-light)'}}>{l.employees?.emp_code}</span></td>
                 <td>{l.reason||'—'}</td>
@@ -1194,6 +1392,7 @@ function LoansTab() {
           </tbody>
         </table>}
       </div>
+      <Pager page={page} setPage={setPage} total={sorted.length} pageSize={PAGE_SIZE}/>
     </div>
 
     {modal&&<Modal title={modal==='add'?'New Loan':'Edit Loan'} onClose={()=>setModal(null)}
@@ -1228,11 +1427,13 @@ function LeaveTypesSection(){
   useEffect(()=>{load();},[load]);
   const blank={name:'',deduction_source:'balance_annual',own_pool_entitlement:0,exhaust_to_salary:true,annual_cap:0,incident_cap:0,is_paid:true,carry_forward:false,allow_half_days:true,requires_document:false,active:true};
   const save=async()=>{
-    if(!form.name){alert('Name required.');return;}setSaving(true);
+    if(!form.name){toast.error('Name required.');return;}setSaving(true);
     const p={name:form.name,deduction_source:form.deduction_source,own_pool_entitlement:Number(form.own_pool_entitlement||0),exhaust_to_salary:!!form.exhaust_to_salary,annual_cap:Number(form.annual_cap||0),incident_cap:Number(form.incident_cap||0),is_paid:!!form.is_paid,carry_forward:!!form.carry_forward,allow_half_days:!!form.allow_half_days,requires_document:!!form.requires_document,active:!!form.active};
-    if(modal==='add')await sb.from('leave_types').insert(p);
-    else await sb.from('leave_types').update(p).eq('id',modal.id);
-    setSaving(false);setModal(null);load();
+    const {error} = modal==='add' ? await dbWrite(sb.from('leave_types').insert(p)) : await dbWrite(sb.from('leave_types').update(p).eq('id',modal.id));
+    setSaving(false);
+    if(error) return;
+    toast.success(modal==='add'?'Leave type added.':'Leave type updated.');
+    setModal(null);load();
   };
   const src=form.deduction_source;
   const srcLabel={balance_annual:'Annual Balance Pool',balance_own:'Own Balance Pool',salary_only:'Salary Deduction Only',none:'No Deduction (Fully Paid)'};
@@ -1284,13 +1485,14 @@ function LeaveTypesSection(){
 
 function LeaveRequestsSection({leaveTypes}){
   const[requests,setRequests]=useState([]);const[loading,setLoading]=useState(true);const[filter,setFilter]=useState('pending');const[reviewModal,setReviewModal]=useState(null);const[hrNote,setHrNote]=useState('');const[saving,setSaving]=useState(false);
+  const[page,setPage]=useState(1);const PAGE_SIZE=25;
   const load=useCallback(async()=>{setLoading(true);const{data}=await sb.from('leave_requests').select('*,employees(full_name,emp_code),leave_types(name,requires_document)').order('created_at',{ascending:false});setRequests(data||[]);setLoading(false);},[]);
   useEffect(()=>{load();},[load]);
   const approve=async req=>{
     setSaving(true);
     const{data:existing}=await sb.from('leave_requests').select('start_date,end_date').eq('employee_id',req.employee_id).eq('status','approved').neq('id',req.id);
     const overlap=(existing||[]).find(r=>!(new Date(req.end_date)<new Date(r.start_date)||new Date(req.start_date)>new Date(r.end_date)));
-    if(overlap&&!confirm(`Warning: overlaps with approved leave ${overlap.start_date}–${overlap.end_date}. Approve anyway?`)){setSaving(false);return;}
+    if(overlap&&!await confirmDialog(`Overlaps with approved leave ${overlap.start_date}–${overlap.end_date}. Approve anyway?`,{title:'Overlapping Leave',danger:true,confirmLabel:'Approve Anyway'})){setSaving(false);return;}
     const lt=leaveTypes.find(t=>t.id===req.leave_type_id);
     if(lt&&(lt.deduction_source==='balance_annual'||lt.deduction_source==='balance_own')){
       const yr=new Date(req.start_date).getFullYear();
@@ -1305,11 +1507,23 @@ function LeaveRequestsSection({leaveTypes}){
         await sb.from(tbl).update({used_days:newUsed,remaining_days:newRem}).eq('id',bal.id);
       }
     }
-    await sb.from('leave_requests').update({status:'approved',hr_note:hrNote||null,reviewed_at:new Date().toISOString()}).eq('id',req.id);
-    setSaving(false);setReviewModal(null);setHrNote('');load();
+    const {error} = await dbWrite(sb.from('leave_requests').update({status:'approved',hr_note:hrNote||null,reviewed_at:new Date().toISOString()}).eq('id',req.id));
+    setSaving(false);
+    if(error) return;
+    toast.success('Leave request approved.');
+    setReviewModal(null);setHrNote('');load();
   };
-  const reject=async req=>{setSaving(true);await sb.from('leave_requests').update({status:'rejected',hr_note:hrNote||null,reviewed_at:new Date().toISOString()}).eq('id',req.id);setSaving(false);setReviewModal(null);setHrNote('');load();};
+  const reject=async req=>{
+    setSaving(true);
+    const {error} = await dbWrite(sb.from('leave_requests').update({status:'rejected',hr_note:hrNote||null,reviewed_at:new Date().toISOString()}).eq('id',req.id));
+    setSaving(false);
+    if(error) return;
+    toast.success('Leave request rejected.');
+    setReviewModal(null);setHrNote('');load();
+  };
   const filtered=requests.filter(r=>filter==='all'||r.status===filter);
+  const pageRows=paginate(filtered,page,PAGE_SIZE);
+  useEffect(()=>{setPage(1);},[filter,requests.length]);
   const pending=requests.filter(r=>r.status==='pending').length;
   return(<div className="card mb-20">
     <div className="card-header">
@@ -1324,7 +1538,7 @@ function LeaveRequestsSection({leaveTypes}){
       {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
       filtered.length===0?<div className="empty"><div className="empty-icon">📋</div><div className="empty-text">No {filter} requests.</div></div>:
       <table><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Doc</th><th>Status</th><th></th></tr></thead>
-      <tbody>{filtered.map(r=><tr key={r.id}>
+      <tbody>{pageRows.map(r=><tr key={r.id}>
         <td style={{fontWeight:500}}>{r.employees?.full_name}<br/><span style={{fontSize:11,color:'var(--ink-light)'}}>{r.employees?.emp_code}</span></td>
         <td>{r.leave_types?.name||'—'}</td>
         <td style={{fontSize:12}}>{r.start_date} → {r.end_date}</td>
@@ -1335,6 +1549,7 @@ function LeaveRequestsSection({leaveTypes}){
         <td>{r.status==='pending'&&<button className="btn btn-secondary btn-sm" onClick={()=>{setReviewModal(r);setHrNote('');}}>Review</button>}</td>
       </tr>)}</tbody></table>}
     </div>
+    <Pager page={page} setPage={setPage} total={filtered.length} pageSize={PAGE_SIZE}/>
     {reviewModal&&<Modal title={`Review — ${reviewModal.employees?.full_name}`} onClose={()=>setReviewModal(null)}
       footer={<><button className="btn btn-secondary" onClick={()=>setReviewModal(null)}>Cancel</button><button className="btn btn-danger" onClick={()=>reject(reviewModal)} disabled={saving}>Reject</button><button className="btn btn-success" onClick={()=>approve(reviewModal)} disabled={saving}>{saving?<><span className="spinner"></span></>:'Approve'}</button></>}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginBottom:14}}>
@@ -1368,7 +1583,7 @@ function LeaveTab(){
   },[year]);
   useEffect(()=>{load();},[load]);
   const autoInit=async()=>{
-    if(!confirm(`Auto-initialize ${year} leave balances for all active employees without one?`))return;
+    if(!await confirmDialog(`Auto-initialize ${year} leave balances for all active employees without one?`,{title:'Initialize Leave Balances'}))return;
     const existing=new Set(balances.map(b=>b.employee_id));
     const todayStr=today();
     const toCreate=employees.filter(e=>!existing.has(e.id)).map(e=>{
@@ -1376,9 +1591,9 @@ function LeaveTab(){
       const entitlement=leaveEntitlement(e.hire_date,year);
       return{employee_id:e.id,year,annual_entitlement:entitlement,used_days:0,remaining_days:accrued,accrued_days:accrued,manual_override:false};
     });
-    if(!toCreate.length){alert('All employees already have balances for this year.');return;}
-    await sb.from('leave_balances').insert(toCreate);
-    alert(`${toCreate.length} balances created.`);load();
+    if(!toCreate.length){toast.info('All employees already have balances for this year.');return;}
+    const {error} = await dbWrite(sb.from('leave_balances').insert(toCreate));
+    if(!error){toast.success(`${toCreate.length} balances created.`);load();}
   };
   const save=async()=>{
     setSaving(true);
@@ -1387,9 +1602,11 @@ function LeaveTab(){
     const accrued=emp&&!form.manual_override?accruedLeave(emp.hire_date,today()):ent;
     const remaining=Math.max(0,accrued-used);
     const payload={employee_id:form.employee_id,year:Number(form.year),annual_entitlement:ent,used_days:used,remaining_days:remaining,accrued_days:accrued,manual_override:!!form.manual_override};
-    if(modal==='add')await sb.from('leave_balances').insert(payload);
-    else await sb.from('leave_balances').update(payload).eq('id',modal.id);
-    setSaving(false);setModal(null);load();
+    const {error} = modal==='add' ? await dbWrite(sb.from('leave_balances').insert(payload)) : await dbWrite(sb.from('leave_balances').update(payload).eq('id',modal.id));
+    setSaving(false);
+    if(error) return;
+    toast.success(modal==='add'?'Leave balance added.':'Leave balance updated.');
+    setModal(null);load();
   };
   return(<>
     <LeaveTypesSection/>
@@ -1449,6 +1666,9 @@ function AllowancesTab() {
   const [form,setForm]=useState({...BLANK_ALLOW});
   const [saving,setSaving]=useState(false);
   const [filterEmp,setFilterEmp]=useState('');
+  const [sort,setSort]=useState({key:'employees.full_name',dir:'asc'});
+  const [page,setPage]=useState(1);
+  const PAGE_SIZE=25;
 
   const load=useCallback(async()=>{
     setLoading(true);
@@ -1462,20 +1682,25 @@ function AllowancesTab() {
   useEffect(()=>{load();},[load]);
 
   const save=async()=>{
-    if(!form.employee_id||!form.name||!form.amount){alert('Employee, name, and amount are required.');return;}
+    if(!form.employee_id||!form.name||!form.amount){toast.error('Employee, name, and amount are required.');return;}
     setSaving(true);
     const payload={employee_id:form.employee_id,name:form.name,amount:Number(form.amount),type:form.type||'fixed',active:form.active!==false};
-    if(modal==='add') await sb.from('allowances').insert(payload);
-    else await sb.from('allowances').update(payload).eq('id',modal.id);
-    setSaving(false);setModal(null);load();
+    const {error} = modal==='add' ? await dbWrite(sb.from('allowances').insert(payload)) : await dbWrite(sb.from('allowances').update(payload).eq('id',modal.id));
+    setSaving(false);
+    if(error) return;
+    toast.success(modal==='add'?'Allowance added.':'Allowance updated.');
+    setModal(null);load();
   };
 
   const toggle=async(a)=>{
-    await sb.from('allowances').update({active:!a.active}).eq('id',a.id);
-    load();
+    const {error} = await dbWrite(sb.from('allowances').update({active:!a.active}).eq('id',a.id));
+    if(!error) load();
   };
 
   const filtered=allowances.filter(a=>!filterEmp||a.employee_id===filterEmp);
+  const sorted=sortRows(filtered,sort);
+  const pageRows=paginate(sorted,page,PAGE_SIZE);
+  useEffect(()=>{setPage(1);},[filterEmp,allowances.length]);
   const totalFixed=allowances.filter(a=>a.type==='fixed'&&a.active).reduce((s,a)=>s+Number(a.amount),0);
 
   return (<>
@@ -1501,9 +1726,16 @@ function AllowancesTab() {
         {loading?<div className="empty"><div className="empty-text">Loading…</div></div>:
         filtered.length===0?<div className="empty"><div className="empty-icon">💰</div><div className="empty-text">No allowances found.</div></div>:
         <table>
-          <thead><tr><th>Employee</th><th>Allowance Name</th><th>Type</th><th className="tbl-num">Amount (EGP)</th><th>Active</th><th></th></tr></thead>
+          <thead><tr>
+            <SortableTh label="Employee" sortKey="employees.full_name" sort={sort} setSort={setSort}/>
+            <SortableTh label="Allowance Name" sortKey="name" sort={sort} setSort={setSort}/>
+            <SortableTh label="Type" sortKey="type" sort={sort} setSort={setSort}/>
+            <SortableTh label="Amount (EGP)" sortKey="amount" sort={sort} setSort={setSort} className="tbl-num"/>
+            <SortableTh label="Active" sortKey="active" sort={sort} setSort={setSort}/>
+            <th></th>
+          </tr></thead>
           <tbody>
-            {filtered.map(a=>(
+            {pageRows.map(a=>(
               <tr key={a.id}>
                 <td style={{fontWeight:500}}>{a.employees?.full_name}<br/><span style={{fontSize:11,color:'var(--ink-light)'}}>{a.employees?.emp_code}</span></td>
                 <td>{a.name}</td>
@@ -1519,6 +1751,7 @@ function AllowancesTab() {
           </tbody>
         </table>}
       </div>
+      <Pager page={page} setPage={setPage} total={sorted.length} pageSize={PAGE_SIZE}/>
     </div>
 
     {modal&&<Modal title={modal==='add'?'Add Allowance':'Edit Allowance'} onClose={()=>setModal(null)}
@@ -1562,18 +1795,20 @@ function PenaltyTypesTab() {
   useEffect(()=>{load();},[load]);
 
   const save=async()=>{
-    if(!form.name){alert('Name is required.');return;}
+    if(!form.name){toast.error('Name is required.');return;}
     setSaving(true);
     const payload={name:form.name,description:form.description||null,default_amount:form.default_amount?Number(form.default_amount):null};
-    if(modal==='add') await sb.from('penalty_types').insert(payload);
-    else await sb.from('penalty_types').update(payload).eq('id',modal.id);
-    setSaving(false);setModal(null);load();
+    const {error} = modal==='add' ? await dbWrite(sb.from('penalty_types').insert(payload)) : await dbWrite(sb.from('penalty_types').update(payload).eq('id',modal.id));
+    setSaving(false);
+    if(error) return;
+    toast.success(modal==='add'?'Penalty type added.':'Penalty type updated.');
+    setModal(null);load();
   };
 
   const del=async(t)=>{
-    if(!confirm('Delete this penalty type?')) return;
-    await sb.from('penalty_types').delete().eq('id',t.id);
-    load();
+    if(!await confirmDialog('Delete this penalty type?',{title:'Delete Penalty Type',danger:true,confirmLabel:'Delete'})) return;
+    const {error} = await dbWrite(sb.from('penalty_types').delete().eq('id',t.id));
+    if(!error){toast.success('Penalty type deleted.');load();}
   };
 
   return (<>
@@ -1629,7 +1864,7 @@ function AdjPanel({ emp, adj, onChange, loans, penaltyTypes, leaveBal }) {
 
   return (
     <div className="adj-panel">
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+      <div className="adj-grid" style={{ display:'grid', gap:12 }}>
 
         {/* OT */}
         <div className="adj-section">
@@ -2116,6 +2351,9 @@ function HistoryTab({ onViewRun }) {
   const [runs,setRuns]=useState([]);
   const [loading,setLoading]=useState(true);
   const [voidTarget,setVoidTarget]=useState(null);
+  const [sort,setSort]=useState({key:'closing_date',dir:'desc'});
+  const [page,setPage]=useState(1);
+  const PAGE_SIZE=25;
   const load=useCallback(async()=>{
     setLoading(true);
     const {data}=await sb.from('payroll_runs').select('*').order('closing_date',{ascending:false});
@@ -2123,6 +2361,9 @@ function HistoryTab({ onViewRun }) {
   },[]);
   useEffect(()=>{load();},[load]);
   const latestFinalizedId=runs.find(r=>r.status==='finalized')?.id;
+  const sorted=sortRows(runs,sort);
+  const pageRows=paginate(sorted,page,PAGE_SIZE);
+  useEffect(()=>{setPage(1);},[runs.length]);
   return (
     <div className="card">
       <div className="card-header"><div className="card-title">Payroll History</div></div>
@@ -2130,9 +2371,15 @@ function HistoryTab({ onViewRun }) {
       runs.length===0?<div className="empty"><div className="empty-icon">📋</div><div className="empty-text">No payroll runs yet.</div></div>:
       <div className="tbl-wrap">
         <table>
-          <thead><tr><th>Month</th><th>Closing Date</th><th>Status</th><th>Created</th><th></th></tr></thead>
+          <thead><tr>
+            <SortableTh label="Month" sortKey="month" sort={sort} setSort={setSort}/>
+            <SortableTh label="Closing Date" sortKey="closing_date" sort={sort} setSort={setSort}/>
+            <SortableTh label="Status" sortKey="status" sort={sort} setSort={setSort}/>
+            <SortableTh label="Created" sortKey="created_at" sort={sort} setSort={setSort}/>
+            <th></th>
+          </tr></thead>
           <tbody>
-            {runs.map(r=>(
+            {pageRows.map(r=>(
               <tr key={r.id}>
                 <td style={{fontWeight:500}}>{mLabel(r.month)}</td>
                 <td>{r.closing_date}</td>
@@ -2149,6 +2396,7 @@ function HistoryTab({ onViewRun }) {
           </tbody>
         </table>
       </div>}
+      <Pager page={page} setPage={setPage} total={sorted.length} pageSize={PAGE_SIZE}/>
       {voidTarget&&<VoidRunModal run={voidTarget} onClose={()=>setVoidTarget(null)} onVoided={()=>{setVoidTarget(null);load();}}/>}
     </div>
   );
@@ -2690,9 +2938,9 @@ function AccessControlTab(){
   const load=useCallback(async()=>{setLoading(true);const[{data:e},{data:a}]=await Promise.all([sb.from('employees').select('id,full_name,emp_code,department').eq('status','active').order('full_name'),sb.from('employee_portal_access').select('*')]);setEmployees(e||[]);setAccess(a||[]);setLoading(false);},[]);
   useEffect(()=>{load();},[load]);
   const getAcc=id=>access.find(a=>a.employee_id===id);
-  const createAccess=async emp=>{const pin=generatePIN();const hash=await sha256(emp.id+pin);const ex=getAcc(emp.id);if(ex)await sb.from('employee_portal_access').update({pin_hash:hash,is_active:true}).eq('id',ex.id);else await sb.from('employee_portal_access').insert({employee_id:emp.id,pin_hash:hash,is_active:true});setGeneratedPin(pin);setPinModal({emp,action:'create'});load();};
-  const resetPin=async emp=>{const pin=generatePIN();const hash=await sha256(emp.id+pin);await sb.from('employee_portal_access').update({pin_hash:hash}).eq('employee_id',emp.id);setGeneratedPin(pin);setPinModal({emp,action:'reset'});load();};
-  const toggleAcc=async emp=>{const a=getAcc(emp.id);if(!a)return;await sb.from('employee_portal_access').update({is_active:!a.is_active}).eq('id',a.id);load();};
+  const createAccess=async emp=>{const pin=generatePIN();const hash=await sha256(emp.id+pin);const ex=getAcc(emp.id);const{error}=ex?await dbWrite(sb.from('employee_portal_access').update({pin_hash:hash,is_active:true}).eq('id',ex.id)):await dbWrite(sb.from('employee_portal_access').insert({employee_id:emp.id,pin_hash:hash,is_active:true}));if(error)return;setGeneratedPin(pin);setPinModal({emp,action:'create'});load();};
+  const resetPin=async emp=>{const pin=generatePIN();const hash=await sha256(emp.id+pin);const{error}=await dbWrite(sb.from('employee_portal_access').update({pin_hash:hash}).eq('employee_id',emp.id));if(error)return;setGeneratedPin(pin);setPinModal({emp,action:'reset'});load();};
+  const toggleAcc=async emp=>{const a=getAcc(emp.id);if(!a)return;const{error}=await dbWrite(sb.from('employee_portal_access').update({is_active:!a.is_active}).eq('id',a.id));if(!error){toast.success(a.is_active?'Portal access suspended.':'Portal access reinstated.');load();}};
   const copyPin=()=>{navigator.clipboard.writeText(generatedPin);setCopied(true);setTimeout(()=>setCopied(false),2000);};
   return(<>
     <div className="stats"><div className="stat accent"><div className="stat-label">Portal Users</div><div className="stat-value">{access.filter(a=>a.is_active).length}</div></div><div className="stat"><div className="stat-label">Total Employees</div><div className="stat-value">{employees.length}</div></div><div className="stat"><div className="stat-label">No Access</div><div className="stat-value">{employees.length-access.length}</div></div><div className="stat"><div className="stat-label">Suspended</div><div className="stat-value">{access.filter(a=>!a.is_active).length}</div></div></div>
@@ -2715,7 +2963,17 @@ function SettingsTab(){
   const defs={variance_threshold:'15',company_name:'Eterna Developments',hr_manager_name:'م. محمد عبدالباقي',general_manager_name:'المدير العام',ot_multiplier:'1.35',si_min:String(SI_DEFAULTS.si_min),si_max:String(SI_DEFAULTS.si_max),pers_ex:String(SI_DEFAULTS.pers_ex)};
   const allKeys=[...keys,...siKeys];
   useEffect(()=>{(async()=>{setLoading(true);const{data}=await sb.from('settings').select('*');const m={...defs};(data||[]).forEach(s=>m[s.key]=s.value);setS(m);applyPayrollSettings(m);setLoading(false);})();},[]);
-  const save=async()=>{setSaving(true);for(const k of allKeys)await sb.from('settings').upsert({key:k,value:String(settings[k]??defs[k]),updated_at:new Date().toISOString()},{onConflict:'key'});applyPayrollSettings(settings);setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  const save=async()=>{
+    setSaving(true);
+    let hadError=false;
+    for(const k of allKeys){
+      const {error}=await dbWrite(sb.from('settings').upsert({key:k,value:String(settings[k]??defs[k]),updated_at:new Date().toISOString()},{onConflict:'key'}));
+      if(error){hadError=true;break;}
+    }
+    setSaving(false);
+    if(hadError)return;
+    applyPayrollSettings(settings);setSaved(true);setTimeout(()=>setSaved(false),2000);
+  };
   if(loading)return<div className="empty"><div className="empty-text">Loading…</div></div>;
   return(<div className="card"><div className="card-header"><div className="card-title">System Settings</div><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:saved?'✓ Saved':'Save Settings'}</button></div><div className="card-body"><div style={{maxWidth:520,display:'flex',flexDirection:'column',gap:16}}>{keys.map(k=><div key={k} className="form-group"><label>{labels[k]}</label><input value={settings[k]??''} onChange={e=>setS(p=>({...p,[k]:e.target.value}))}/></div>)}
     <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4}}>
@@ -2750,11 +3008,11 @@ function ESSPortal({empId,employeeData,onLogout}){
   const previewDays=selLt?calcDays(reqForm.start_date,reqForm.end_date,selLt.allow_half_days):0;
 
   const submitLeave=async()=>{
-    const lt=leaveTypes.find(t=>t.id===reqForm.leave_type_id);if(!lt){alert('Select leave type.');return;}
+    const lt=leaveTypes.find(t=>t.id===reqForm.leave_type_id);if(!lt){toast.error('Select leave type.');return;}
     const days=calcDays(reqForm.start_date,reqForm.end_date,lt.allow_half_days);
-    if(days<=0){alert('Invalid dates.');return;}
-    if(lt.incident_cap>0&&days>lt.incident_cap){alert(`Max ${lt.incident_cap} days per request for this type.`);return;}
-    if(lt.requires_document&&!reqForm.document){alert('Document upload required for this leave type.');return;}
+    if(days<=0){toast.error('Invalid dates.');return;}
+    if(lt.incident_cap>0&&days>lt.incident_cap){toast.error(`Max ${lt.incident_cap} days per request for this type.`);return;}
+    if(lt.requires_document&&!reqForm.document){toast.error('Document upload required for this leave type.');return;}
     setSubmitting(true);setReqMsg(null);
     let doc_url=null;
     if(reqForm.document){
@@ -2763,7 +3021,8 @@ function ESSPortal({empId,employeeData,onLogout}){
       if(upErr){setReqMsg({type:'danger',text:'Upload failed: '+upErr.message});setSubmitting(false);return;}
       const{data:u}=sb.storage.from('documents').getPublicUrl(path);doc_url=u?.publicUrl;
     }
-    await sb.from('leave_requests').insert({employee_id:empId,leave_type_id:reqForm.leave_type_id,start_date:reqForm.start_date,end_date:reqForm.end_date,days_requested:days,reason:reqForm.reason||null,document_url:doc_url,status:'pending'});
+    const{error:reqErr}=await sb.from('leave_requests').insert({employee_id:empId,leave_type_id:reqForm.leave_type_id,start_date:reqForm.start_date,end_date:reqForm.end_date,days_requested:days,reason:reqForm.reason||null,document_url:doc_url,status:'pending'});
+    if(reqErr){setReqMsg({type:'danger',text:'Submit failed: '+reqErr.message});setSubmitting(false);return;}
     setReqMsg({type:'success',text:'Request submitted. Pending HR approval.'});
     setReqForm({leave_type_id:'',start_date:'',end_date:'',reason:'',document:null});
     const{data:lr}=await sb.from('leave_requests').select('*,leave_types(name)').eq('employee_id',empId).order('created_at',{ascending:false});
@@ -2934,6 +3193,7 @@ function App(){
   const[historyView,setHistoryView]=useState(null);
   const[payslipData,setPayslipData]=useState(null);
   const[pendingLeave,setPendingLeave]=useState(0);
+  const[mobileNavOpen,setMobileNavOpen]=useState(false);
 
   useEffect(()=>{
     if(session==='admin'){
@@ -2941,8 +3201,8 @@ function App(){
     } else setPendingLeave(0);
   },[session,tab]);
 
-  if(!session) return <LoginScreen onAdminLogin={()=>saveSession('admin')} onEmpLogin={(id,emp)=>saveSession({empId:id,empData:emp})}/>;
-  if(session!=='admin') return <ESSPortal empId={session.empId} employeeData={session.empData} onLogout={()=>saveSession(null)}/>;
+  if(!session) return <><ToastHost/><ConfirmHost/><LoginScreen onAdminLogin={()=>saveSession('admin')} onEmpLogin={(id,emp)=>saveSession({empId:id,empData:emp})}/></>;
+  if(session!=='admin') return <><ToastHost/><ConfirmHost/><ESSPortal empId={session.empId} employeeData={session.empData} onLogout={()=>saveSession(null)}/></>;
 
   const nav=[
     {id:'employees',icon:'👥',label:'Employees'},
@@ -2984,7 +3244,10 @@ function App(){
 
   return(
     <div className="shell">
-      <div className="sidebar">
+      <ToastHost/>
+      <ConfirmHost/>
+      {mobileNavOpen&&<div className="sidebar-backdrop" onClick={()=>setMobileNavOpen(false)}/>}
+      <div className={`sidebar${mobileNavOpen?' open':''}`}>
         <div className="sidebar-logo">
           <div className="co">ETERNA</div>
           <div className="sub">Payroll System</div>
@@ -2993,7 +3256,7 @@ function App(){
         <div className="nav">
           {nav.map(n=>(
             <div key={n.id} className={`nav-item${tab===n.id?' active':''}`}
-              onClick={()=>{setTab(n.id);setHistoryView(null);setPayslipData(null);}}>
+              onClick={()=>{setTab(n.id);setHistoryView(null);setPayslipData(null);setMobileNavOpen(false);}}>
               <span className="nav-icon">{n.icon}</span>
               <span>{n.label}</span>
               {(n.badge||0)>0&&<span className="nav-badge">{n.badge}</span>}
@@ -3007,6 +3270,7 @@ function App(){
       </div>
       <div className="main">
         <div className="topbar">
+          <button className="hamburger-btn" onClick={()=>setMobileNavOpen(true)} aria-label="Open menu">☰</button>
           <div className="topbar-title">{titles[tab]||''}</div>
           <div className="topbar-badge">Eterna Developments</div>
         </div>
