@@ -2125,23 +2125,33 @@ function AttendanceTab(){
   const[sort,setSort]=useState({key:'date',dir:'desc'});
   const[page,setPage]=useState(1);
   const PAGE_SIZE=25;
+  const[pending,setPending]=useState([]);
+  const[reviewing,setReviewing]=useState(null);
 
   const load=useCallback(async()=>{
     setLoading(true);
     const from=`${month}-01`;
     const toDate=new Date(month+'-01'); toDate.setMonth(toDate.getMonth()+1);
     const to=toDate.toISOString().slice(0,10);
-    const [{data:r},{data:e},{data:sets}]=await Promise.all([
+    const [{data:r},{data:e},{data:sets},{data:pend}]=await Promise.all([
       sb.from('attendance_records').select('*,employees(full_name,emp_code)').gte('date',from).lt('date',to).order('date',{ascending:false}),
       sb.from('employees').select('id,full_name,emp_code').eq('status','active').order('full_name'),
       sb.from('settings').select('*'),
+      sb.from('attendance_records').select('*,employees(full_name,emp_code)').eq('source','self_reported').eq('self_report_status','pending').order('date',{ascending:false}),
     ]);
-    setRecords(r||[]);setEmployees(e||[]);
+    setRecords(r||[]);setEmployees(e||[]);setPending(pend||[]);
     const setsMap={};(sets||[]).forEach(s=>setsMap[s.key]=s.value);
     setSettings(p=>({...p,shift_start:setsMap.shift_start||p.shift_start,shift_end:setsMap.shift_end||p.shift_end,grace_minutes:setsMap.grace_minutes||p.grace_minutes}));
     setLoading(false);
   },[month]);
   useEffect(()=>{load();},[load]);
+
+  const reviewSR=async(r,decision)=>{
+    setReviewing(r.id);
+    const {error}=await dbWrite(sb.from('attendance_records').update({self_report_status:decision}).eq('id',r.id));
+    setReviewing(null);
+    if(!error){toast.success(`Self-report ${decision}.`);load();}
+  };
 
   const filtered=records.filter(r=>!empFilter||r.employee_id===empFilter);
   const sorted=sortRows(filtered,sort);
@@ -2168,6 +2178,23 @@ function AttendanceTab(){
       <div className="stat"><div className="stat-label">Absent (recorded)</div><div className="stat-value">{counts.absent}</div></div>
       <div className="stat"><div className="stat-label">Half Day</div><div className="stat-value">{counts.half}</div></div>
     </div>
+    {pending.length>0&&<div className="card mb-20">
+      <div className="card-header"><div className="card-title">Pending Self-Reports <span className="nav-badge" style={{marginLeft:8,fontSize:11}}>{pending.length}</span></div></div>
+      <div className="tbl-wrap"><table>
+        <thead><tr><th>Employee</th><th>Date</th><th>Check In</th><th>Check Out</th><th>Note</th><th></th></tr></thead>
+        <tbody>{pending.map(r=>(
+          <tr key={r.id}>
+            <td style={{fontWeight:500}}>{r.employees?.full_name}<br/><span style={{fontSize:11,color:'var(--ink-light)'}}>{r.employees?.emp_code}</span></td>
+            <td>{r.date}</td><td>{r.check_in||'—'}</td><td>{r.check_out||'—'}</td>
+            <td style={{fontSize:12,maxWidth:220}}>{r.note||'—'}</td>
+            <td><div className="flex">
+              <button className="btn btn-danger btn-sm" disabled={reviewing===r.id} onClick={()=>reviewSR(r,'rejected')}>Reject</button>
+              <button className="btn btn-success btn-sm" disabled={reviewing===r.id} onClick={()=>reviewSR(r,'approved')}>Approve</button>
+            </div></td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+    </div>}
     <div className="card">
       <div className="card-header">
         <div className="card-title">Attendance Records — {mLabel(month)}</div>
@@ -2204,7 +2231,7 @@ function AttendanceTab(){
                 <td>{r.check_out||'—'}</td>
                 <td className="tbl-num">{r.late_minutes||0}</td>
                 <td><span className={`badge badge-${r.status==='present'?'active':r.status==='late'?'draft':r.status==='absent'?'inactive':'active-loan'}`}>{r.status}</span></td>
-                <td style={{fontSize:11,color:'var(--ink-light)'}}>{r.source==='zkteco_import'?'Imported':r.source==='self_reported'?'Self-reported':'Manual'}</td>
+                <td style={{fontSize:11,color:'var(--ink-light)'}}>{r.source==='zkteco_import'?'Imported':r.source==='self_reported'?`Self-reported (${r.self_report_status||'pending'})`:'Manual'}</td>
                 <td><div className="flex">
                   <button className="btn btn-secondary btn-sm" onClick={()=>setEditRecord(r)}>Edit</button>
                   <button className="btn btn-sm btn-danger" onClick={()=>delRecord(r)}>Delete</button>
@@ -2427,7 +2454,7 @@ function RunPayrollTab({ onRunCreated }) {
       sb.from('penalty_types').select('*').order('name'),
       sb.from('settings').select('*'),
       sb.from('payroll_runs').select('id').eq('status','finalized').order('closing_date',{ascending:false}).limit(1),
-      sb.from('attendance_records').select('*').gte('date',attFrom).lt('date',attTo),
+      sb.from('attendance_records').select('*').gte('date',attFrom).lt('date',attTo).or('source.neq.self_reported,self_report_status.eq.approved'),
     ]);
     if(!emps||emps.length===0){setMsg({type:'danger',text:'No active employees.'});setCalculating(false);return;}
     const{data:existingRun}=await sb.from('payroll_runs').select('id,status').eq('month',month).neq('status','void').maybeSingle();
@@ -3396,6 +3423,8 @@ function SettingsTab(){
 // ── ESS PORTAL ────────────────────────────────────────────────────────────────
 function ESSPortal({empId,employeeData,onLogout}){
   const[tab,setTab]=useState('payslips');const[runs,setRuns]=useState([]);const[runLines,setRunLines]=useState({});const[selectedRun,setSelectedRun]=useState(null);const[leaveBal,setLeaveBal]=useState(null);const[leaveTypes,setLeaveTypes]=useState([]);const[leaveReqs,setLeaveReqs]=useState([]);const[loans,setLoans]=useState([]);const[penalties,setPenalties]=useState([]);const[loading,setLoading]=useState(true);const[reqModal,setReqModal]=useState(false);const[reqForm,setReqForm]=useState({leave_type_id:'',start_date:'',end_date:'',reason:'',document:null});const[submitting,setSubmitting]=useState(false);const[reqMsg,setReqMsg]=useState(null);const fileRef=useRef(null);
+  const[attMonth,setAttMonth]=useState(today().slice(0,7));const[attRecords,setAttRecords]=useState([]);const[attLoading,setAttLoading]=useState(true);
+  const[srModal,setSrModal]=useState(false);const[srForm,setSrForm]=useState({date:today(),check_in:'',check_out:'',note:''});const[srSubmitting,setSrSubmitting]=useState(false);const[srMsg,setSrMsg]=useState(null);
   const yr=new Date().getFullYear();
   useEffect(()=>{(async()=>{
     setLoading(true);
@@ -3439,6 +3468,30 @@ function ESSPortal({empId,employeeData,onLogout}){
     setLeaveReqs(lr||[]);setSubmitting(false);
   };
 
+  const loadAttendance=useCallback(async()=>{
+    setAttLoading(true);
+    const from=`${attMonth}-01`;
+    const toDate=new Date(attMonth+'-01'); toDate.setMonth(toDate.getMonth()+1);
+    const to=toDate.toISOString().slice(0,10);
+    const{data}=await sb.from('attendance_records').select('*').eq('employee_id',empId).gte('date',from).lt('date',to).order('date',{ascending:false});
+    setAttRecords(data||[]);setAttLoading(false);
+  },[empId,attMonth]);
+  useEffect(()=>{loadAttendance();},[loadAttendance]);
+
+  const submitSelfReport=async()=>{
+    if(!srForm.date){toast.error('Date is required.');return;}
+    if(!srForm.check_in&&!srForm.note){toast.error('Add a check-in time or a note explaining the day.');return;}
+    setSrSubmitting(true);setSrMsg(null);
+    const{data:existing}=await sb.from('attendance_records').select('id').eq('employee_id',empId).eq('date',srForm.date).maybeSingle();
+    if(existing){setSrMsg({type:'danger',text:'A record already exists for this date. Contact HR if you believe it\'s incorrect.'});setSrSubmitting(false);return;}
+    const{error}=await sb.from('attendance_records').insert({employee_id:empId,date:srForm.date,check_in:srForm.check_in||null,check_out:srForm.check_out||null,status:srForm.check_in?'present':'present',source:'self_reported',self_report_status:'pending',note:srForm.note||null});
+    if(error){setSrMsg({type:'danger',text:'Submit failed: '+error.message});setSrSubmitting(false);return;}
+    setSrMsg({type:'success',text:'Self-report submitted. Pending HR review.'});
+    setSrForm({date:today(),check_in:'',check_out:'',note:''});
+    setSrSubmitting(false);
+    loadAttendance();
+  };
+
   if(loading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}><div className="spinner spinner-dark" style={{width:28,height:28}}></div></div>;
 
   return(<div className="ess-shell">
@@ -3449,7 +3502,7 @@ function ESSPortal({empId,employeeData,onLogout}){
         <button className="btn btn-sm" style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'none'}} onClick={onLogout}>Logout</button>
       </div>
     </div>
-    <div className="ess-nav">{[['payslips','📄 Payslips'],['leave','🏖️ Leave'],['loans','💳 Loans'],['penalties','⚠️ Penalties']].map(([id,label])=><div key={id} className={`ess-nav-item${tab===id?' active':''}`} onClick={()=>{setTab(id);setSelectedRun(null);}}>{label}</div>)}</div>
+    <div className="ess-nav">{[['payslips','📄 Payslips'],['leave','🏖️ Leave'],['attendance','🕒 Attendance'],['loans','💳 Loans'],['penalties','⚠️ Penalties']].map(([id,label])=><div key={id} className={`ess-nav-item${tab===id?' active':''}`} onClick={()=>{setTab(id);setSelectedRun(null);}}>{label}</div>)}</div>
     <div className="ess-content">
       {tab==='payslips'&&!selectedRun&&<>
         <div style={{fontWeight:600,fontSize:16,marginBottom:16}}>My Payslips</div>
@@ -3474,6 +3527,38 @@ function ESSPortal({empId,employeeData,onLogout}){
             {selLt&&reqForm.start_date&&reqForm.end_date&&<div className="form-group full"><div className="alert alert-info" style={{marginBottom:0}}>Days: <strong>{previewDays}</strong>{selLt.deduction_source==='balance_annual'&&leaveBal?` · Balance remaining: ${leaveBal.remaining_days}d`:''}</div></div>}
             <div className="form-group full"><label>Reason</label><textarea value={reqForm.reason} onChange={e=>setReqForm(p=>({...p,reason:e.target.value}))} rows={2} style={{resize:'vertical'}}/></div>
             {selLt?.requires_document&&<div className="form-group full"><label>Document Upload (Required for this type)</label><input type="file" ref={fileRef} onChange={e=>setReqForm(p=>({...p,document:e.target.files[0]||null}))}/>{reqForm.document&&<div style={{fontSize:12,color:'var(--success)',marginTop:3}}>✓ {reqForm.document.name}</div>}</div>}
+          </div>
+        </Modal>}
+      </>}
+      {tab==='attendance'&&<>
+        <div className="card-header" style={{padding:0,marginBottom:16,border:'none'}}>
+          <div style={{fontWeight:600,fontSize:16}}>My Attendance</div>
+          <div className="flex">
+            <input type="month" value={attMonth} onChange={e=>setAttMonth(e.target.value)} style={{width:150}}/>
+            <button className="btn btn-primary btn-sm" onClick={()=>{setSrModal(true);setSrMsg(null);}}>+ Self-Report a Day</button>
+          </div>
+        </div>
+        <div className="card"><div className="tbl-wrap">
+          {attLoading?<div className="empty"><div className="empty-text">Loading…</div></div>:
+          attRecords.length===0?<div className="empty"><div className="empty-icon">🕒</div><div className="empty-text">No attendance records for {mLabel(attMonth)}.</div></div>:
+          <table><thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Status</th><th>Source</th></tr></thead>
+          <tbody>{attRecords.map(r=><tr key={r.id}>
+            <td>{r.date}</td><td>{r.check_in||'—'}</td><td>{r.check_out||'—'}</td>
+            <td><span className={`badge badge-${r.status==='present'?'active':r.status==='late'?'draft':r.status==='absent'?'inactive':'active-loan'}`}>{r.status}</span></td>
+            <td style={{fontSize:12,color:'var(--ink-light)'}}>
+              {r.source==='zkteco_import'?'Machine':r.source==='self_reported'?`Self-reported (${r.self_report_status||'pending'})`:'HR entry'}
+            </td>
+          </tr>)}</tbody></table>}
+        </div></div>
+        {srModal&&<Modal title="Self-Report Attendance" onClose={()=>setSrModal(false)}
+          footer={<><button className="btn btn-secondary" onClick={()=>setSrModal(false)}>Cancel</button><button className="btn btn-primary" onClick={submitSelfReport} disabled={srSubmitting}>{srSubmitting?<><span className="spinner"></span> Submitting…</>:'Submit'}</button></>}>
+          {srMsg&&<div className={`alert alert-${srMsg.type}`}>{srMsg.text}</div>}
+          <div className="alert alert-info">Use this only for a day the attendance machine missed (e.g. it was down). Your report goes to HR for review before it counts.</div>
+          <div className="form-grid">
+            <div className="form-group"><label>Date *</label><input type="date" value={srForm.date} onChange={e=>setSrForm(p=>({...p,date:e.target.value}))}/></div>
+            <div className="form-group"><label>Check In</label><input type="time" value={srForm.check_in} onChange={e=>setSrForm(p=>({...p,check_in:e.target.value}))}/></div>
+            <div className="form-group"><label>Check Out</label><input type="time" value={srForm.check_out} onChange={e=>setSrForm(p=>({...p,check_out:e.target.value}))}/></div>
+            <div className="form-group full"><label>Note *</label><textarea value={srForm.note} onChange={e=>setSrForm(p=>({...p,note:e.target.value}))} rows={2} placeholder="e.g. Machine was down, I was on-site all day" style={{resize:'vertical'}}/></div>
           </div>
         </Modal>}
       </>}
