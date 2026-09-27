@@ -505,8 +505,22 @@ async function sha256(msg){const buf=await crypto.subtle.digest('SHA-256',new Te
 function generatePIN(){return String(Math.floor(100000+Math.random()*900000));}
 
 // ── PAYROLL ENGINE ────────────────────────────────────────────────────────────
-const EMP_SI = 0.11, ER_SI = 0.1875, SI_MIN = 2700, SI_MAX = 16700, PERS_EX = 20000;
-const BRACKETS = [{l:40000,r:0},{l:55000,r:.10},{l:70000,r:.15},{l:200000,r:.20},{l:400000,r:.225},{l:Infinity,r:.275}];
+const EMP_SI = 0.11, ER_SI = 0.1875;
+const SI_DEFAULTS = { si_min: 2700, si_max: 16700, pers_ex: 20000 };
+let SI_MIN = SI_DEFAULTS.si_min, SI_MAX = SI_DEFAULTS.si_max, PERS_EX = SI_DEFAULTS.pers_ex;
+// Income Tax Law 91/2005 as amended by Law 7/2024 (brackets) — annual, EGP
+const BRACKETS = [{l:40000,r:0},{l:55000,r:.10},{l:70000,r:.15},{l:200000,r:.20},{l:400000,r:.225},{l:1200000,r:.25},{l:Infinity,r:.275}];
+
+// Applies SI/exemption limits from the settings table (falls back to SI_DEFAULTS for missing/invalid values)
+function applyPayrollSettings(settingsMap) {
+  const num = (key) => {
+    const v = Number(settingsMap?.[key]);
+    return Number.isFinite(v) && v > 0 ? v : SI_DEFAULTS[key];
+  };
+  SI_MIN  = num('si_min');
+  SI_MAX  = num('si_max');
+  PERS_EX = num('pers_ex');
+}
 
 function calcTax(t) {
   if (t <= 0) return 0;
@@ -1793,6 +1807,7 @@ function RunPayrollTab({ onRunCreated }) {
     if(!emps||emps.length===0){setMsg({type:'danger',text:'No active employees.'});setCalculating(false);return;}
     const setsMap={};(sets||[]).forEach(s=>setsMap[s.key]=s.value);
     const vt=Number(setsMap.variance_threshold||15);setVarianceThreshold(vt);
+    applyPayrollSettings(setsMap);
     let prevLinesData=[];
     if(prevRun&&prevRun.length>0){const{data:pl}=await sb.from('payroll_lines').select('employee_id,dispensed_net').eq('run_id',prevRun[0].id);prevLinesData=pl||[];}
     setPrevLines(prevLinesData);
@@ -2629,12 +2644,19 @@ function AccessControlTab(){
 function SettingsTab(){
   const[settings,setS]=useState({});const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);const[saved,setSaved]=useState(false);
   const keys=['variance_threshold','company_name','hr_manager_name','general_manager_name','ot_multiplier'];
-  const labels={variance_threshold:'Variance Alert Threshold (%)',company_name:'Company Name',hr_manager_name:'HR Manager Name (Payslip Signature)',general_manager_name:'General Manager Name (Payslip Signature)',ot_multiplier:'OT Rate Multiplier (default 1.35×)'};
-  const defs={variance_threshold:'15',company_name:'Eterna Developments',hr_manager_name:'م. محمد عبدالباقي',general_manager_name:'المدير العام',ot_multiplier:'1.35'};
-  useEffect(()=>{(async()=>{setLoading(true);const{data}=await sb.from('settings').select('*');const m={...defs};(data||[]).forEach(s=>m[s.key]=s.value);setS(m);setLoading(false);})();},[]);
-  const save=async()=>{setSaving(true);for(const k of keys)await sb.from('settings').upsert({key:k,value:String(settings[k]??defs[k]),updated_at:new Date().toISOString()},{onConflict:'key'});setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  const siKeys=['si_min','si_max','pers_ex'];
+  const labels={variance_threshold:'Variance Alert Threshold (%)',company_name:'Company Name',hr_manager_name:'HR Manager Name (Payslip Signature)',general_manager_name:'General Manager Name (Payslip Signature)',ot_multiplier:'OT Rate Multiplier (default 1.35×)',si_min:'Social Insurance Min. Wage (EGP/month)',si_max:'Social Insurance Max. Wage (EGP/month)',pers_ex:'Annual Personal Tax Exemption (EGP)'};
+  const defs={variance_threshold:'15',company_name:'Eterna Developments',hr_manager_name:'م. محمد عبدالباقي',general_manager_name:'المدير العام',ot_multiplier:'1.35',si_min:String(SI_DEFAULTS.si_min),si_max:String(SI_DEFAULTS.si_max),pers_ex:String(SI_DEFAULTS.pers_ex)};
+  const allKeys=[...keys,...siKeys];
+  useEffect(()=>{(async()=>{setLoading(true);const{data}=await sb.from('settings').select('*');const m={...defs};(data||[]).forEach(s=>m[s.key]=s.value);setS(m);applyPayrollSettings(m);setLoading(false);})();},[]);
+  const save=async()=>{setSaving(true);for(const k of allKeys)await sb.from('settings').upsert({key:k,value:String(settings[k]??defs[k]),updated_at:new Date().toISOString()},{onConflict:'key'});applyPayrollSettings(settings);setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),2000);};
   if(loading)return<div className="empty"><div className="empty-text">Loading…</div></div>;
-  return(<div className="card"><div className="card-header"><div className="card-title">System Settings</div><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:saved?'✓ Saved':'Save Settings'}</button></div><div className="card-body"><div style={{maxWidth:520,display:'flex',flexDirection:'column',gap:16}}>{keys.map(k=><div key={k} className="form-group"><label>{labels[k]}</label><input value={settings[k]??''} onChange={e=>setS(p=>({...p,[k]:e.target.value}))}/></div>)}</div><div className="alert alert-info" style={{marginTop:20,maxWidth:520}}>Settings apply on next payroll calculation. Changes don't affect finalized runs.</div></div></div>);
+  return(<div className="card"><div className="card-header"><div className="card-title">System Settings</div><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner"></span> Saving…</>:saved?'✓ Saved':'Save Settings'}</button></div><div className="card-body"><div style={{maxWidth:520,display:'flex',flexDirection:'column',gap:16}}>{keys.map(k=><div key={k} className="form-group"><label>{labels[k]}</label><input value={settings[k]??''} onChange={e=>setS(p=>({...p,[k]:e.target.value}))}/></div>)}
+    <div style={{borderTop:'1px solid var(--border)',paddingTop:16,marginTop:4}}>
+      <div style={{fontSize:12,fontWeight:600,color:'var(--ink-light)',textTransform:'uppercase',marginBottom:12}}>Social Insurance &amp; Tax (update each January per NOSI/ETA notices)</div>
+      {siKeys.map(k=><div key={k} className="form-group" style={{marginBottom:12}}><label>{labels[k]}</label><input type="number" min="0" value={settings[k]??''} onChange={e=>setS(p=>({...p,[k]:e.target.value}))}/></div>)}
+    </div>
+  </div><div className="alert alert-info" style={{marginTop:20,maxWidth:520}}>Settings apply on next payroll calculation. Changes don't affect finalized runs.</div></div></div>);
 }
 
 // ── ESS PORTAL ────────────────────────────────────────────────────────────────
