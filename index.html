@@ -402,6 +402,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--maroon);box-shadow:0 
 .badge-inactive{background:var(--bg);color:var(--ink-light);}
 .badge-draft{background:var(--warning-bg);color:#8a6d00;}
 .badge-finalized{background:var(--success-bg);color:var(--success);}
+.badge-void{background:var(--danger-bg);color:var(--danger);text-decoration:line-through;}
 .badge-active-loan{background:#EBF4FF;color:#1E4E8C;}
 .badge-settled{background:var(--bg);color:var(--ink-light);}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:100;display:flex;align-items:center;justify-content:center;}
@@ -1805,6 +1806,11 @@ function RunPayrollTab({ onRunCreated }) {
       sb.from('payroll_runs').select('id').eq('status','finalized').order('closing_date',{ascending:false}).limit(1),
     ]);
     if(!emps||emps.length===0){setMsg({type:'danger',text:'No active employees.'});setCalculating(false);return;}
+    const{data:existingRun}=await sb.from('payroll_runs').select('id,status').eq('month',month).neq('status','void').maybeSingle();
+    if(existingRun){
+      setMsg({type:'warn',text:`A ${existingRun.status} run already exists for ${mLabel(month)}. Void it from History before re-running this month, or pick a different month.`});
+      setCalculating(false);return;
+    }
     const setsMap={};(sets||[]).forEach(s=>setsMap[s.key]=s.value);
     const vt=Number(setsMap.variance_threshold||15);setVarianceThreshold(vt);
     applyPayrollSettings(setsMap);
@@ -1857,6 +1863,7 @@ function RunPayrollTab({ onRunCreated }) {
 
     const inserts=preview.map(l=>({
       run_id:run.id, employee_id:l.employee_id,
+      loan_id: adjs[l.employee_id]?.loan_id || null,
       pro_rata_factor:l.pro_rata_factor,
       gross_full:l.gross_full, si_base:l.si_base, emp_si:l.emp_si, er_si:l.er_si,
       annual_taxable:l.annual_taxable, monthly_tax:l.monthly_tax,
@@ -1905,14 +1912,19 @@ function RunPayrollTab({ onRunCreated }) {
     // Monthly leave accrual
     const accrualYear=new Date(closing).getFullYear();
     const{data:allBals}=await sb.from('leave_balances').select('*,employees(hire_date)').eq('year',accrualYear);
+    const accrualLogs=[];
     for(const bal of(allBals||[])){
       const hireDate=bal.employees?.hire_date;if(!hireDate)continue;
       const rate=monthlyAccrualRate(hireDate,closing);
       const maxEnt=leaveEntitlement(hireDate,accrualYear);
-      const newAccrued=Math.min(Math.round((Number(bal.accrued_days||0)+rate)*100)/100,maxEnt);
+      const prevAccrued=Number(bal.accrued_days||0);
+      const newAccrued=Math.min(Math.round((prevAccrued+rate)*100)/100,maxEnt);
       const newRem=Math.max(0,Math.round((newAccrued-Number(bal.used_days||0))*100)/100);
       await sb.from('leave_balances').update({accrued_days:newAccrued,remaining_days:newRem}).eq('id',bal.id);
+      const delta=Math.round((newAccrued-prevAccrued)*100)/100;
+      if(delta>0) accrualLogs.push({run_id:run.id,employee_id:bal.employee_id,accrued_delta:delta});
     }
+    if(accrualLogs.length>0) await sb.from('leave_accrual_log').insert(accrualLogs);
     setMsg({type:'success',text:'Payroll finalized. Leave balances accrued for this month.'});
     setPreview(null);setSaving(false);
     if(onRunCreated) onRunCreated();
@@ -2056,16 +2068,61 @@ function RunPayrollTab({ onRunCreated }) {
 }
 
 // ── HISTORY + REGISTER ────────────────────────────────────────────────────────
+function VoidRunModal({ run, onClose, onVoided }){
+  const[reason,setReason]=useState('');const[busy,setBusy]=useState(false);const[err,setErr]=useState('');
+  const doVoid=async()=>{
+    if(!reason.trim()){setErr('A reason is required.');return;}
+    setBusy(true);setErr('');
+    const{data:lines}=await sb.from('payroll_lines').select('*').eq('run_id',run.id);
+    const year=new Date(run.closing_date).getFullYear();
+    for(const l of (lines||[])){
+      if(l.loan_id && Number(l.dispensed_loan||0)>0){
+        const{data:loan}=await sb.from('loans').select('*').eq('id',l.loan_id).maybeSingle();
+        if(loan){
+          const newRem=Number(loan.remaining_balance||0)+Number(l.dispensed_loan);
+          await sb.from('loans').update({remaining_balance:newRem,status:'active'}).eq('id',loan.id);
+        }
+      }
+      if(Number(l.leave_from_balance||0)>0){
+        const{data:bal}=await sb.from('leave_balances').select('*').eq('employee_id',l.employee_id).eq('year',year).maybeSingle();
+        if(bal){
+          const newUsed=Math.max(0,Number(bal.used_days)-Number(l.leave_from_balance));
+          const newRem=Number(bal.accrued_days)-newUsed;
+          await sb.from('leave_balances').update({used_days:newUsed,remaining_days:newRem}).eq('id',bal.id);
+        }
+      }
+    }
+    const{data:accruals}=await sb.from('leave_accrual_log').select('*').eq('run_id',run.id);
+    for(const a of (accruals||[])){
+      const{data:bal}=await sb.from('leave_balances').select('*').eq('employee_id',a.employee_id).eq('year',year).maybeSingle();
+      if(bal){
+        const newAccrued=Math.max(0,Number(bal.accrued_days)-Number(a.accrued_delta));
+        const newRem=Math.max(0,newAccrued-Number(bal.used_days));
+        await sb.from('leave_balances').update({accrued_days:newAccrued,remaining_days:newRem}).eq('id',bal.id);
+      }
+    }
+    await sb.from('payroll_runs').update({status:'void',voided_at:new Date().toISOString(),void_reason:reason.trim()}).eq('id',run.id);
+    setBusy(false);onVoided();
+  };
+  return(<Modal title={`Void Run — ${mLabel(run.month)}`} onClose={onClose}
+    footer={<><button className="btn btn-secondary" onClick={onClose} disabled={busy}>Cancel</button><button className="btn btn-danger" onClick={doVoid} disabled={busy}>{busy?<><span className="spinner"></span> Voiding…</>:'Void Run'}</button></>}>
+    <div className="alert alert-warn" style={{marginBottom:12}}>This reverses loan and leave-balance changes made by this run, and marks it void in history. Payroll lines are kept for audit. You can then re-run payroll for {mLabel(run.month)}.</div>
+    {err&&<div className="alert alert-danger" style={{marginBottom:12}}>{err}</div>}
+    <div className="form-group"><label>Reason for voiding *</label><textarea value={reason} onChange={e=>setReason(e.target.value)} rows={3} placeholder="e.g. wrong closing date used, employee missing from run…" style={{resize:'vertical'}}/></div>
+  </Modal>);
+}
+
 function HistoryTab({ onViewRun }) {
   const [runs,setRuns]=useState([]);
   const [loading,setLoading]=useState(true);
-  useEffect(()=>{
-    (async()=>{
-      setLoading(true);
-      const {data}=await sb.from('payroll_runs').select('*').order('closing_date',{ascending:false});
-      setRuns(data||[]);setLoading(false);
-    })();
+  const [voidTarget,setVoidTarget]=useState(null);
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const {data}=await sb.from('payroll_runs').select('*').order('closing_date',{ascending:false});
+    setRuns(data||[]);setLoading(false);
   },[]);
+  useEffect(()=>{load();},[load]);
+  const latestFinalizedId=runs.find(r=>r.status==='finalized')?.id;
   return (
     <div className="card">
       <div className="card-header"><div className="card-title">Payroll History</div></div>
@@ -2079,14 +2136,20 @@ function HistoryTab({ onViewRun }) {
               <tr key={r.id}>
                 <td style={{fontWeight:500}}>{mLabel(r.month)}</td>
                 <td>{r.closing_date}</td>
-                <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
+                <td><span className={`badge badge-${r.status}`}>{r.status}</span>
+                  {r.status==='void'&&r.void_reason&&<div style={{fontSize:11,color:'var(--ink-light)',marginTop:2}}>{r.void_reason}</div>}
+                </td>
                 <td className="text-muted">{new Date(r.created_at).toLocaleDateString('en-EG')}</td>
-                <td><button className="btn btn-secondary btn-sm" onClick={()=>onViewRun(r)}>View Register</button></td>
+                <td><div className="flex">
+                  <button className="btn btn-secondary btn-sm" onClick={()=>onViewRun(r)}>View Register</button>
+                  {r.id===latestFinalizedId&&<button className="btn btn-sm btn-danger" onClick={()=>setVoidTarget(r)}>Void</button>}
+                </div></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>}
+      {voidTarget&&<VoidRunModal run={voidTarget} onClose={()=>setVoidTarget(null)} onVoided={()=>{setVoidTarget(null);load();}}/>}
     </div>
   );
 }
@@ -2155,6 +2218,9 @@ function RegisterView({ run, onBack, onViewPayslip }) {
         <button className="btn btn-gold btn-sm" onClick={exportExcelBoth}>📊 Export Excel (Both Formats)</button>
       </div>
     </div>
+    {run.status==='void'&&<div className="alert alert-danger mb-24">
+      ⛔ This run was voided{run.voided_at?` on ${new Date(run.voided_at).toLocaleDateString('en-EG')}`:''}{run.void_reason?`: ${run.void_reason}`:''}. Do not use these figures for payment — kept for audit only.
+    </div>}
     <div className="stats mb-24">
       <div className="stat accent"><div className="stat-label">Employees</div><div className="stat-value">{lines.length}</div></div>
       <div className="stat gold"><div className="stat-label">Dispensed Net</div><div className="stat-value" style={{fontSize:15}}>EGP {fmt(totals.net)}</div></div>
