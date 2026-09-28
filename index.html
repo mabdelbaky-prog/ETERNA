@@ -1922,7 +1922,14 @@ const ATT_ALIASES = {
   date: ['date','attendancedate','day'],
   check_in: ['firstin','checkin','timein','clockin','intime','in'],
   check_out: ['lastout','checkout','timeout','clockout','outtime','out'],
+  required_work: ['requiredwork','scheduledwork','schedule'],
+  actual_work: ['actualwork','workedhours','workhours'],
+  late_in: ['latein','late'],
+  early_out: ['earlyout'],
+  absent: ['absent','absenthours'],
+  ot1: ['ot1'], ot2: ['ot2'], ot3: ['ot3'],
 };
+const ATT_LEAVE_COL_ALIASES = ['sickleave','vacation','personalleave','annualleave','businessleave'];
 const normHeader = h => String(h||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function resolveAttColumns(headers) {
   const map = {};
@@ -1930,7 +1937,18 @@ function resolveAttColumns(headers) {
     const found = headers.find(h => ATT_ALIASES[key].includes(normHeader(h)));
     if (found) map[key] = found;
   }
+  map.leave_cols = headers.filter(h => ATT_LEAVE_COL_ALIASES.includes(normHeader(h)));
   return map;
+}
+// Parses "H:MM" / "HH:MM" (or an Excel time fraction) into total minutes.
+function hmToMinutes(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  const s = String(v).trim();
+  const m = s.match(/^(\d{1,3}):(\d{2})$/);
+  if (m) return Number(m[1])*60 + Number(m[2]);
+  const num = Number(s);
+  if (!isNaN(num) && num > 0 && num < 2) return Math.round(num*24*60);
+  return 0;
 }
 function parseDateFlexible(v) {
   if (!v && v !== 0) return null;
@@ -1961,11 +1979,15 @@ function parseTimeFlexible(v) {
   }
   return null;
 }
+const attMinToHm = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
 function computeLateAndStatus(checkIn, shiftStart, graceMinutes) {
   if (!checkIn) return { lateMinutes: 0, status: 'absent' };
-  const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
-  const late = Math.max(0, toMin(checkIn) - (toMin(shiftStart) + Number(graceMinutes||0)));
+  const late = Math.max(0, attMinToHm(checkIn) - (attMinToHm(shiftStart) + Number(graceMinutes||0)));
   return { lateMinutes: late, status: late > 0 ? 'late' : 'present' };
+}
+function computeOtMinutes(checkOut, shiftEnd) {
+  if (!checkOut) return 0;
+  return Math.max(0, attMinToHm(checkOut) - attMinToHm(shiftEnd));
 }
 function parseAttendanceWorkbook(arrayBuffer) {
   const wb = XLSX.read(arrayBuffer, { type: 'array' });
@@ -1975,9 +1997,11 @@ function parseAttendanceWorkbook(arrayBuffer) {
   const headers = Object.keys(raw[0]);
   const colMap = resolveAttColumns(headers);
   if (!colMap.date) return { error: 'Could not find a Date column. Detected columns: '+headers.join(', ') };
-  if (!colMap.check_in) return { error: 'Could not find a First-in/Check-in column. Detected columns: '+headers.join(', ') };
+  const hasRawLog = !!colMap.check_in;
+  const hasSummary = !!(colMap.late_in || colMap.absent || colMap.actual_work);
+  if (!hasRawLog && !hasSummary) return { error: 'Could not find recognizable attendance columns (First-in/Check-in, or Late-In/Absent/Actual Work). Detected columns: '+headers.join(', ') };
   if (!colMap.emp_code && !colMap.name) return { error: 'Could not find an Employee ID or Name column. Detected columns: '+headers.join(', ') };
-  return { rows: raw, colMap };
+  return { rows: raw, colMap, format: hasRawLog ? 'raw_log' : 'summary' };
 }
 
 function AttendanceImportModal({ employees, settings, onClose, onImported }) {
@@ -1995,21 +2019,44 @@ function AttendanceImportModal({ employees, settings, onClose, onImported }) {
         const parsed=parseAttendanceWorkbook(e.target.result);
         if(parsed.error){setFileErr(parsed.error);return;}
         const shiftStart=settings.shift_start||'09:00';
+        const shiftEnd=settings.shift_end||'17:00';
         const grace=Number(settings.grace_minutes||0);
         const resolved=parsed.rows.map((r,idx)=>{
           const rawCode=parsed.colMap.emp_code?String(r[parsed.colMap.emp_code]||'').trim():'';
           const rawName=parsed.colMap.name?String(r[parsed.colMap.name]||'').trim():'';
           let emp=null;
           if(rawCode) emp=employees.find(e=>String(e.emp_code||'').toLowerCase()===rawCode.toLowerCase());
-          if(!emp&&rawName) emp=employees.find(e=>e.full_name.toLowerCase()===rawName.toLowerCase());
+          if(!emp&&rawName){
+            const rn=rawName.toLowerCase().trim();
+            emp=employees.find(e=>e.full_name.toLowerCase().trim()===rn)
+              || employees.find(e=>e.full_name.toLowerCase().split(/\s+/)[0]===rn)
+              || employees.find(e=>e.full_name.toLowerCase().includes(rn));
+          }
           const date=parseDateFlexible(r[parsed.colMap.date]);
-          const checkIn=parseTimeFlexible(r[parsed.colMap.check_in]);
-          const checkOut=parsed.colMap.check_out?parseTimeFlexible(r[parsed.colMap.check_out]):null;
           const errs=[];
           if(!emp) errs.push(`No matching employee for "${rawCode||rawName||'—'}"`);
           if(!date) errs.push('Invalid/unrecognized date');
-          const {lateMinutes,status}=computeLateAndStatus(checkIn,shiftStart,grace);
-          return {_row:idx+2,rawCode,rawName,employee_id:emp?.id,employee_label:emp?`${emp.emp_code} — ${emp.full_name}`:null,date,check_in:checkIn,check_out:checkOut,late_minutes:lateMinutes,status,errors:errs};
+
+          let checkIn=null,checkOut=null,lateMinutes=0,otMinutes=0,status='present',skip=false,skipReason='';
+          if(parsed.format==='raw_log'){
+            checkIn=parseTimeFlexible(r[parsed.colMap.check_in]);
+            checkOut=parsed.colMap.check_out?parseTimeFlexible(r[parsed.colMap.check_out]):null;
+            const la=computeLateAndStatus(checkIn,shiftStart,grace);
+            lateMinutes=la.lateMinutes;status=la.status;
+            otMinutes=computeOtMinutes(checkOut,shiftEnd);
+          } else {
+            const requiredMin=parsed.colMap.required_work?hmToMinutes(r[parsed.colMap.required_work]):null;
+            const actualMin=hmToMinutes(r[parsed.colMap.actual_work]);
+            const absentMin=hmToMinutes(r[parsed.colMap.absent]);
+            const leaveMin=(parsed.colMap.leave_cols||[]).reduce((s,c)=>s+hmToMinutes(r[c]),0);
+            lateMinutes=hmToMinutes(r[parsed.colMap.late_in]);
+            otMinutes=hmToMinutes(r[parsed.colMap.ot1])+hmToMinutes(r[parsed.colMap.ot2])+hmToMinutes(r[parsed.colMap.ot3]);
+            if(leaveMin>0){skip=true;skipReason='On approved leave (handled by Leave, not imported)';}
+            else if((requiredMin===0||requiredMin===null)&&actualMin===0&&absentMin===0&&lateMinutes===0){skip=true;skipReason='No schedule this day (off/weekend)';}
+            else status=absentMin>0?'absent':(lateMinutes>0?'late':'present');
+          }
+
+          return {_row:idx+2,rawCode,rawName,employee_id:emp?.id,employee_label:emp?`${emp.emp_code} — ${emp.full_name}`:null,date,check_in:checkIn,check_out:checkOut,late_minutes:lateMinutes,ot_minutes:otMinutes,status,errors:errs,skip,skipReason};
         });
         setRows(resolved);setStep('preview');
       }catch(err){setFileErr('Could not read file: '+err.message);}
@@ -2017,13 +2064,14 @@ function AttendanceImportModal({ employees, settings, onClose, onImported }) {
     reader.readAsArrayBuffer(file);
   };
 
-  const validRows=rows.filter(r=>r.errors.length===0);
+  const validRows=rows.filter(r=>r.errors.length===0&&!r.skip);
   const errorRows=rows.filter(r=>r.errors.length>0);
+  const skippedRows=rows.filter(r=>r.errors.length===0&&r.skip);
 
   const confirmImport=async()=>{
     if(!validRows.length){toast.error('No valid rows to import.');return;}
     setImporting(true);
-    const payload=validRows.map(r=>({employee_id:r.employee_id,date:r.date,check_in:r.check_in,check_out:r.check_out,late_minutes:r.late_minutes,status:r.status,source:'zkteco_import',updated_at:new Date().toISOString()}));
+    const payload=validRows.map(r=>({employee_id:r.employee_id,date:r.date,check_in:r.check_in,check_out:r.check_out,late_minutes:r.late_minutes,ot_minutes:r.ot_minutes,status:r.status,source:'zkteco_import',updated_at:new Date().toISOString()}));
     const {error}=await dbWrite(sb.from('attendance_records').upsert(payload,{onConflict:'employee_id,date'}));
     setImporting(false);
     if(error) return;
@@ -2038,29 +2086,29 @@ function AttendanceImportModal({ employees, settings, onClose, onImported }) {
         <button className="btn btn-primary" onClick={confirmImport} disabled={importing||!validRows.length}>{importing?<><span className="spinner"></span> Importing…</>:`Import ${validRows.length} Record(s)`}</button>
       </>:null}>
       {step==='idle'&&<>
-        <div className="alert alert-info" style={{marginBottom:14}}>Upload your ZKTeco export (.csv or .xlsx). Expected columns: Employee ID or Name, Date, First-in / Check-in, Last-out / Check-out (optional). Column names are matched flexibly.</div>
+        <div className="alert alert-info" style={{marginBottom:14}}>Upload your ZKTeco export (.csv or .xlsx) — either raw punches (Employee ID/Name, Date, First-in, Last-out) or ZKTeco's own daily summary report (Employee ID/Name, Date, Actual Work, Required Work, Late-In, Absent, OT1/OT2/OT3). Column names are matched flexibly.</div>
         <input type="file" accept=".csv,.xlsx,.xls" onChange={e=>handleFile(e.target.files[0])}/>
         {fileErr&&<div className="alert alert-danger" style={{marginTop:12}}>{fileErr}</div>}
       </>}
       {step==='preview'&&<>
-        <div className="flex" style={{gap:16,marginBottom:12,fontSize:13}}>
+        <div className="flex" style={{gap:16,marginBottom:12,fontSize:13,flexWrap:'wrap'}}>
           <span style={{color:'var(--success)',fontWeight:600}}>{validRows.length} ready</span>
-          {errorRows.length>0&&<span style={{color:'var(--danger)',fontWeight:600}}>{errorRows.length} will be skipped</span>}
+          {skippedRows.length>0&&<span style={{color:'var(--ink-light)',fontWeight:600}}>{skippedRows.length} off-day/leave, not imported</span>}
+          {errorRows.length>0&&<span style={{color:'var(--danger)',fontWeight:600}}>{errorRows.length} will be skipped (errors)</span>}
         </div>
         <div className="tbl-wrap" style={{maxHeight:360,overflowY:'auto'}}>
           <table>
-            <thead><tr><th>Row</th><th>Employee</th><th>Date</th><th>In</th><th>Out</th><th>Late (min)</th><th>Status</th><th>Issue</th></tr></thead>
+            <thead><tr><th>Row</th><th>Employee</th><th>Date</th><th>Late (min)</th><th>OT (min)</th><th>Status</th><th>Issue</th></tr></thead>
             <tbody>
               {rows.map(r=>(
-                <tr key={r._row} style={r.errors.length?{background:'var(--danger-bg)'}:{}}>
+                <tr key={r._row} style={r.errors.length?{background:'var(--danger-bg)'}:r.skip?{opacity:0.55}:{}}>
                   <td>{r._row}</td>
                   <td>{r.employee_label||<span style={{color:'var(--danger)'}}>{r.rawCode||r.rawName||'—'}</span>}</td>
                   <td>{r.date||'—'}</td>
-                  <td>{r.check_in||'—'}</td>
-                  <td>{r.check_out||'—'}</td>
                   <td>{r.late_minutes||0}</td>
-                  <td>{r.status}</td>
-                  <td style={{fontSize:11,color:'var(--danger)'}}>{r.errors.join('; ')}</td>
+                  <td>{r.ot_minutes||0}</td>
+                  <td>{r.skip?'—':r.status}</td>
+                  <td style={{fontSize:11,color:r.errors.length?'var(--danger)':'var(--ink-light)'}}>{r.errors.join('; ')||r.skipReason||''}</td>
                 </tr>
               ))}
             </tbody>
@@ -2080,9 +2128,11 @@ function AttendanceEntryModal({ record, employees, settings, onClose, onSaved })
     if(!form.employee_id||!form.date){toast.error('Employee and date are required.');return;}
     setSaving(true);
     const shiftStart=settings.shift_start||'09:00';
+    const shiftEnd=settings.shift_end||'17:00';
     const grace=Number(settings.grace_minutes||0);
     const computed=form.check_in?computeLateAndStatus(form.check_in,shiftStart,grace):{lateMinutes:0,status:form.status||'absent'};
-    const payload={employee_id:form.employee_id,date:form.date,check_in:form.check_in||null,check_out:form.check_out||null,late_minutes:computed.lateMinutes,status:form.check_in?computed.status:(form.status||'absent'),source:'manual',note:form.note||null,updated_at:new Date().toISOString()};
+    const otMinutes=computeOtMinutes(form.check_out,shiftEnd);
+    const payload={employee_id:form.employee_id,date:form.date,check_in:form.check_in||null,check_out:form.check_out||null,late_minutes:computed.lateMinutes,ot_minutes:otMinutes,status:form.check_in?computed.status:(form.status||'absent'),source:'manual',note:form.note||null,updated_at:new Date().toISOString()};
     const {error}=await dbWrite(sb.from('attendance_records').upsert(payload,{onConflict:'employee_id,date'}));
     setSaving(false);
     if(error) return;
@@ -2218,6 +2268,7 @@ function AttendanceTab(){
             <SortableTh label="Check In" sortKey="check_in" sort={sort} setSort={setSort}/>
             <SortableTh label="Check Out" sortKey="check_out" sort={sort} setSort={setSort}/>
             <SortableTh label="Late (min)" sortKey="late_minutes" sort={sort} setSort={setSort} className="tbl-num"/>
+            <SortableTh label="OT (min)" sortKey="ot_minutes" sort={sort} setSort={setSort} className="tbl-num"/>
             <SortableTh label="Status" sortKey="status" sort={sort} setSort={setSort}/>
             <SortableTh label="Source" sortKey="source" sort={sort} setSort={setSort}/>
             <th></th>
@@ -2230,6 +2281,7 @@ function AttendanceTab(){
                 <td>{r.check_in||'—'}</td>
                 <td>{r.check_out||'—'}</td>
                 <td className="tbl-num">{r.late_minutes||0}</td>
+                <td className="tbl-num">{r.ot_minutes||0}</td>
                 <td><span className={`badge badge-${r.status==='present'?'active':r.status==='late'?'draft':r.status==='absent'?'inactive':'active-loan'}`}>{r.status}</span></td>
                 <td style={{fontSize:11,color:'var(--ink-light)'}}>{r.source==='zkteco_import'?'Imported':r.source==='self_reported'?`Self-reported (${r.self_report_status||'pending'})`:'Manual'}</td>
                 <td><div className="flex">
@@ -2465,16 +2517,13 @@ function RunPayrollTab({ onRunCreated }) {
     const setsMap={};(sets||[]).forEach(s=>setsMap[s.key]=s.value);
     const vt=Number(setsMap.variance_threshold||15);setVarianceThreshold(vt);
     applyPayrollSettings(setsMap);
-    const shiftEnd=setsMap.shift_end||'17:00';
-    const toMin=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m;};
     const attByEmp={};
     (attRows||[]).forEach(r=>{if(!attByEmp[r.employee_id])attByEmp[r.employee_id]=[];attByEmp[r.employee_id].push(r);});
     const attRecsMap={};
     emps.forEach(emp=>{
       const recs=attByEmp[emp.id]||[];
       const lateMin=recs.reduce((s,r)=>s+Number(r.late_minutes||0),0);
-      let otMin=0;
-      recs.forEach(r=>{ if(r.check_out){ const extra=toMin(r.check_out)-toMin(shiftEnd); if(extra>0) otMin+=extra; } });
+      const otMin=recs.reduce((s,r)=>s+Number(r.ot_minutes||0),0);
       const absences=recs.filter(r=>r.status==='absent').length;
       attRecsMap[emp.id]={ lateHours:Math.round(lateMin/60*100)/100, otHours:Math.round(otMin/60*100)/100, absences, recordCount:recs.length };
     });
@@ -3548,9 +3597,10 @@ function ESSPortal({empId,employeeData,onLogout}){
         <div className="card"><div className="tbl-wrap">
           {attLoading?<div className="empty"><div className="empty-text">Loading…</div></div>:
           attRecords.length===0?<div className="empty"><div className="empty-icon">🕒</div><div className="empty-text">No attendance records for {mLabel(attMonth)}.</div></div>:
-          <table><thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Status</th><th>Source</th></tr></thead>
+          <table><thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Late (min)</th><th>OT (min)</th><th>Status</th><th>Source</th></tr></thead>
           <tbody>{attRecords.map(r=><tr key={r.id}>
             <td>{r.date}</td><td>{r.check_in||'—'}</td><td>{r.check_out||'—'}</td>
+            <td>{r.late_minutes||0}</td><td>{r.ot_minutes||0}</td>
             <td><span className={`badge badge-${r.status==='present'?'active':r.status==='late'?'draft':r.status==='absent'?'inactive':'active-loan'}`}>{r.status}</span></td>
             <td style={{fontSize:12,color:'var(--ink-light)'}}>
               {r.source==='zkteco_import'?'Machine':r.source==='self_reported'?`Self-reported (${r.self_report_status||'pending'})`:'HR entry'}
