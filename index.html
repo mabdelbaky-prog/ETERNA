@@ -2163,6 +2163,29 @@ function AttendanceEntryModal({ record, employees, settings, onClose, onSaved })
   </Modal>);
 }
 
+function exportAttendanceExceptions(records, monthLabel) {
+  const exceptions = records.filter(r=>r.status==='late'||r.status==='absent');
+  const header = ['Emp Code','Employee Name','Date','Type','Late (min)','Justification','Manager Signature'];
+  const rows = exceptions.map(r=>[
+    r.employees?.emp_code||'', r.employees?.full_name||'', r.date,
+    r.status==='absent'?'Absent':'Late', r.status==='late'?(r.late_minutes||0):'',
+    '', '',
+  ]);
+  const aoa = [[`Attendance Exceptions Report — ${monthLabel}`], [], header, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:10},{wch:22},{wch:12},{wch:10},{wch:10},{wch:32},{wch:22}];
+  ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:header.length-1}}];
+  const titleRef = XLSX.utils.encode_cell({r:0,c:0});
+  if (ws[titleRef]) ws[titleRef].s = {font:{bold:true,sz:14,color:{rgb:'8B1A2E'}}};
+  for (let c=0;c<header.length;c++){
+    const ref = XLSX.utils.encode_cell({r:2,c});
+    if (ws[ref]) ws[ref].s = {font:{bold:true},fill:{fgColor:{rgb:'F0E6D2'}},border:{bottom:{style:'thin'}}};
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Exceptions');
+  XLSX.writeFile(wb, `Attendance_Exceptions_${monthLabel.replace(/\s+/g,'_')}.xlsx`, {cellStyles:true});
+}
+
 function AttendanceTab(){
   const[records,setRecords]=useState([]);
   const[employees,setEmployees]=useState([]);
@@ -2254,6 +2277,10 @@ function AttendanceTab(){
             <option value="">All employees</option>
             {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
           </select>
+          <button className="btn btn-secondary" onClick={()=>{
+            if(!sorted.some(r=>r.status==='late'||r.status==='absent')){toast.info('No late/absent records for this selection.');return;}
+            exportAttendanceExceptions(sorted, mLabel(month));
+          }}>📤 Export Exceptions</button>
           <button className="btn btn-secondary" onClick={()=>setShowImport(true)}>⬆ Import (ZKTeco)</button>
           <button className="btn btn-primary" onClick={()=>setEditRecord('add')}>+ Add Record</button>
         </div>
