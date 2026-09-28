@@ -937,10 +937,11 @@ function validateEmpRow(row) {
 }
 
 // ── EMPLOYEES TAB ─────────────────────────────────────────────────────────────
-const BLANK_EMP = {emp_code:'',full_name:'',national_id:'',department:'',job_title:'',hire_date:'',target_net:'',status:'active',bank_name:'',account_number:''};
+const BLANK_EMP = {emp_code:'',full_name:'',national_id:'',department:'',job_title:'',hire_date:'',target_net:'',status:'active',bank_name:'',account_number:'',manager_id:''};
 
-function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
+function EmpModal({ modal, form, setForm, saving, onClose, onSave, employees }) {
   if (!modal) return null;
+  const managerOptions=(employees||[]).filter(e=>e.id!==form.id);
   return (
     <Modal title={modal==='add'?'Add Employee':'Edit Employee'} onClose={onClose}
       footer={<>
@@ -953,6 +954,13 @@ function EmpModal({ modal, form, setForm, saving, onClose, onSave }) {
         <Field label="National ID" field="national_id" placeholder="29901011234567" form={form} setForm={setForm} />
         <Field label="Department" field="department" placeholder="Sales" form={form} setForm={setForm} />
         <Field label="Job Title" field="job_title" placeholder="Sales Manager" form={form} setForm={setForm} />
+        <div className="form-group">
+          <label>Manager</label>
+          <select value={form.manager_id||''} onChange={e=>setForm(p=>({...p,manager_id:e.target.value||null}))}>
+            <option value="">No manager</option>
+            {managerOptions.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
+          </select>
+        </div>
         <Field label="Hire Date *" field="hire_date" type="date" form={form} setForm={setForm} />
         <Field label="Target Net (EGP/month) *" field="target_net" type="number" placeholder="15000" form={form} setForm={setForm} />
         <Field label="Email" field="email" type="email" placeholder="ahmed@example.com" form={form} setForm={setForm} />
@@ -1180,9 +1188,10 @@ function EmployeesTab() {
   const save = async()=>{
     if(!form.full_name||!form.hire_date||!form.target_net){toast.error('Name, hire date, and target net are required.');return;}
     setSaving(true);
+    const payload={...form,target_net:Number(form.target_net),manager_id:form.manager_id||null};
     const {error} = modal==='add'
-      ? await dbWrite(sb.from('employees').insert({...form,target_net:Number(form.target_net)}))
-      : await dbWrite(sb.from('employees').update({...form,target_net:Number(form.target_net)}).eq('id',modal.id));
+      ? await dbWrite(sb.from('employees').insert(payload))
+      : await dbWrite(sb.from('employees').update(payload).eq('id',modal.id));
     setSaving(false);
     if(error) return;
     toast.success(modal==='add'?'Employee added.':'Employee updated.');
@@ -1247,6 +1256,7 @@ function EmployeesTab() {
             <SortableTh label="National ID" sortKey="national_id" sort={sort} setSort={setSort}/>
             <SortableTh label="Department" sortKey="department" sort={sort} setSort={setSort}/>
             <SortableTh label="Job Title" sortKey="job_title" sort={sort} setSort={setSort}/>
+            <th>Manager</th>
             <SortableTh label="Hire Date" sortKey="hire_date" sort={sort} setSort={setSort}/>
             <SortableTh label="Target Net" sortKey="target_net" sort={sort} setSort={setSort} className="tbl-num"/>
             <th>Bank</th><SortableTh label="Status" sortKey="status" sort={sort} setSort={setSort}/><th></th>
@@ -1259,6 +1269,7 @@ function EmployeesTab() {
                 <td className="text-muted">{emp.national_id||'—'}</td>
                 <td>{emp.department||'—'}</td>
                 <td>{emp.job_title||'—'}</td>
+                <td style={{fontSize:12}}>{employees.find(e=>e.id===emp.manager_id)?.full_name||'—'}</td>
                 <td>{emp.hire_date}</td>
                 <td className="tbl-num">{fmt(emp.target_net)}</td>
                 <td style={{fontSize:12}}>{emp.bank_name||'—'}</td>
@@ -1278,7 +1289,7 @@ function EmployeesTab() {
     </div>
 
     {showBulk&&<BulkModal onClose={()=>setShowBulk(false)} onDone={load} employees={employees} />}
-    <EmpModal modal={modal} form={form} setForm={setForm} saving={saving} onClose={closeModal} onSave={save} />
+    <EmpModal modal={modal} form={form} setForm={setForm} saving={saving} onClose={closeModal} onSave={save} employees={employees} />
   </>);
 }
 
@@ -1929,7 +1940,7 @@ const ATT_ALIASES = {
   absent: ['absent','absenthours'],
   ot1: ['ot1'], ot2: ['ot2'], ot3: ['ot3'],
   justification: ['justification','reason','explanation'],
-  manager_signature: ['managersignature','signature','manager'],
+  manager_signature: ['managersignature','signature'],
 };
 const ATT_LEAVE_COL_ALIASES = ['sickleave','vacation','personalleave','annualleave','businessleave'];
 const normHeader = h => String(h||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -2175,17 +2186,24 @@ function AttendanceEntryModal({ record, employees, settings, onClose, onSaved })
   </Modal>);
 }
 
-function exportAttendanceExceptions(records, monthLabel) {
+function exportAttendanceExceptions(records, monthLabel, employees, managerNameFilter) {
   const exceptions = records.filter(r=>r.status==='late'||r.status==='absent');
-  const header = ['Emp Code','Employee Name','Date','Type','Late (min)','Justification','Manager Signature'];
-  const rows = exceptions.map(r=>[
-    r.employees?.emp_code||'', r.employees?.full_name||'', r.date,
-    r.status==='absent'?'Absent':'Late', r.status==='late'?(r.late_minutes||0):'',
-    '', '',
-  ]);
-  const aoa = [[`Attendance Exceptions Report — ${monthLabel}`], [], header, ...rows];
+  const header = ['Emp Code','Employee Name','Date','Type','Late (min)','Manager','Justification','Manager Signature'];
+  const rows = exceptions.map(r=>{
+    const emp=(employees||[]).find(e=>e.id===r.employee_id);
+    const manager=emp?(employees||[]).find(e=>e.id===emp.manager_id):null;
+    return [
+      r.employees?.emp_code||'', r.employees?.full_name||'', r.date,
+      r.status==='absent'?'Absent':'Late', r.status==='late'?(r.late_minutes||0):'',
+      manager?.full_name||'', r.justification||'', '',
+    ];
+  });
+  const title = managerNameFilter
+    ? `Attendance Exceptions Report — ${monthLabel} — For ${managerNameFilter}`
+    : `Attendance Exceptions Report — ${monthLabel}`;
+  const aoa = [[title], [], header, ...rows];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{wch:10},{wch:22},{wch:12},{wch:10},{wch:10},{wch:32},{wch:22}];
+  ws['!cols'] = [{wch:10},{wch:22},{wch:12},{wch:10},{wch:10},{wch:18},{wch:32},{wch:22}];
   ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:header.length-1}}];
   const titleRef = XLSX.utils.encode_cell({r:0,c:0});
   if (ws[titleRef]) ws[titleRef].s = {font:{bold:true,sz:14,color:{rgb:'8B1A2E'}}};
@@ -2195,7 +2213,8 @@ function exportAttendanceExceptions(records, monthLabel) {
   }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Exceptions');
-  XLSX.writeFile(wb, `Attendance_Exceptions_${monthLabel.replace(/\s+/g,'_')}.xlsx`, {cellStyles:true});
+  const fileSuffix = managerNameFilter ? `${monthLabel.replace(/\s+/g,'_')}_${managerNameFilter.replace(/\s+/g,'_')}` : monthLabel.replace(/\s+/g,'_');
+  XLSX.writeFile(wb, `Attendance_Exceptions_${fileSuffix}.xlsx`, {cellStyles:true});
 }
 
 function ClearRecordsModal({ employees, defaultFrom, defaultTo, defaultEmployeeId, onClose, onCleared }) {
@@ -2362,6 +2381,7 @@ function AttendanceTab(){
   const[loading,setLoading]=useState(true);
   const[month,setMonth]=useState(today().slice(0,7));
   const[empFilter,setEmpFilter]=useState('');
+  const[managerFilter,setManagerFilter]=useState('');
   const[showImport,setShowImport]=useState(false);
   const[showClear,setShowClear]=useState(false);
   const[showImportJust,setShowImportJust]=useState(false);
@@ -2379,7 +2399,7 @@ function AttendanceTab(){
     const to=toDate.toISOString().slice(0,10);
     const [{data:r},{data:e},{data:sets},{data:pend}]=await Promise.all([
       sb.from('attendance_records').select('*,employees(full_name,emp_code)').gte('date',from).lt('date',to).order('date',{ascending:false}),
-      sb.from('employees').select('id,full_name,emp_code').eq('status','active').order('full_name'),
+      sb.from('employees').select('id,full_name,emp_code,manager_id').eq('status','active').order('full_name'),
       sb.from('settings').select('*'),
       sb.from('attendance_records').select('*,employees(full_name,emp_code)').eq('source','self_reported').eq('self_report_status','pending').order('date',{ascending:false}),
     ]);
@@ -2397,10 +2417,14 @@ function AttendanceTab(){
     if(!error){toast.success(`Self-report ${decision}.`);load();}
   };
 
-  const filtered=records.filter(r=>!empFilter||r.employee_id===empFilter);
+  const managers=employees.filter(m=>employees.some(e=>e.manager_id===m.id));
+  const filtered=records.filter(r=>
+    (!empFilter||r.employee_id===empFilter) &&
+    (!managerFilter||employees.find(e=>e.id===r.employee_id)?.manager_id===managerFilter)
+  );
   const sorted=sortRows(filtered,sort);
   const pageRows=paginate(sorted,page,PAGE_SIZE);
-  useEffect(()=>{setPage(1);},[empFilter,month,records.length]);
+  useEffect(()=>{setPage(1);},[empFilter,managerFilter,month,records.length]);
 
   const counts={
     present: records.filter(r=>r.status==='present').length,
@@ -2448,9 +2472,14 @@ function AttendanceTab(){
             <option value="">All employees</option>
             {employees.map(e=><option key={e.id} value={e.id}>{e.emp_code} — {e.full_name}</option>)}
           </select>
+          <select value={managerFilter} onChange={e=>setManagerFilter(e.target.value)} style={{width:180}}>
+            <option value="">All managers</option>
+            {managers.map(m=><option key={m.id} value={m.id}>{m.full_name}</option>)}
+          </select>
           <button className="btn btn-secondary" onClick={()=>{
             if(!sorted.some(r=>r.status==='late'||r.status==='absent')){toast.info('No late/absent records for this selection.');return;}
-            exportAttendanceExceptions(sorted, mLabel(month));
+            const managerName=managerFilter?employees.find(e=>e.id===managerFilter)?.full_name:null;
+            exportAttendanceExceptions(sorted, mLabel(month), employees, managerName);
           }}>📤 Export Exceptions</button>
           <button className="btn btn-secondary" onClick={()=>setShowImportJust(true)}>📥 Import Justifications</button>
           <button className="btn btn-secondary" onClick={()=>setShowImport(true)}>⬆ Import (ZKTeco)</button>
