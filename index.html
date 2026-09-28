@@ -2021,6 +2021,7 @@ function AttendanceImportModal({ employees, settings, onClose, onImported }) {
         const shiftStart=settings.shift_start||'09:00';
         const shiftEnd=settings.shift_end||'17:00';
         const grace=Number(settings.grace_minutes||0);
+        const weekendDays=String(settings.weekend_days||'5,6').split(',').filter(Boolean).map(Number);
         const resolved=parsed.rows.map((r,idx)=>{
           const rawCode=parsed.colMap.emp_code?String(r[parsed.colMap.emp_code]||'').trim():'';
           const rawName=parsed.colMap.name?String(r[parsed.colMap.name]||'').trim():'';
@@ -2041,9 +2042,18 @@ function AttendanceImportModal({ employees, settings, onClose, onImported }) {
           if(parsed.format==='raw_log'){
             checkIn=parseTimeFlexible(r[parsed.colMap.check_in]);
             checkOut=parsed.colMap.check_out?parseTimeFlexible(r[parsed.colMap.check_out]):null;
-            const la=computeLateAndStatus(checkIn,shiftStart,grace);
-            lateMinutes=la.lateMinutes;status=la.status;
+            if(parsed.colMap.late_in){
+              lateMinutes=hmToMinutes(r[parsed.colMap.late_in]);
+              status=checkIn?(lateMinutes>0?'late':'present'):'absent';
+            } else {
+              const la=computeLateAndStatus(checkIn,shiftStart,grace);
+              lateMinutes=la.lateMinutes;status=la.status;
+            }
             otMinutes=computeOtMinutes(checkOut,shiftEnd);
+            if(!checkIn&&lateMinutes===0&&date){
+              const dow=new Date(date+'T00:00:00').getDay();
+              if(weekendDays.includes(dow)){skip=true;skipReason='Weekly off day';}
+            }
           } else {
             const requiredMin=parsed.colMap.required_work?hmToMinutes(r[parsed.colMap.required_work]):null;
             const actualMin=hmToMinutes(r[parsed.colMap.actual_work]);
@@ -2189,7 +2199,7 @@ function exportAttendanceExceptions(records, monthLabel) {
 function AttendanceTab(){
   const[records,setRecords]=useState([]);
   const[employees,setEmployees]=useState([]);
-  const[settings,setSettings]=useState({shift_start:'09:00',shift_end:'17:00',grace_minutes:15});
+  const[settings,setSettings]=useState({shift_start:'09:00',shift_end:'17:00',grace_minutes:15,weekend_days:'5,6'});
   const[loading,setLoading]=useState(true);
   const[month,setMonth]=useState(today().slice(0,7));
   const[empFilter,setEmpFilter]=useState('');
@@ -2214,7 +2224,7 @@ function AttendanceTab(){
     ]);
     setRecords(r||[]);setEmployees(e||[]);setPending(pend||[]);
     const setsMap={};(sets||[]).forEach(s=>setsMap[s.key]=s.value);
-    setSettings(p=>({...p,shift_start:setsMap.shift_start||p.shift_start,shift_end:setsMap.shift_end||p.shift_end,grace_minutes:setsMap.grace_minutes||p.grace_minutes}));
+    setSettings(p=>({...p,shift_start:setsMap.shift_start||p.shift_start,shift_end:setsMap.shift_end||p.shift_end,grace_minutes:setsMap.grace_minutes||p.grace_minutes,weekend_days:setsMap.weekend_days||p.weekend_days}));
     setLoading(false);
   },[month]);
   useEffect(()=>{load();},[load]);
@@ -3472,9 +3482,10 @@ function SettingsTab(){
   const[settings,setS]=useState({});const[loading,setLoading]=useState(true);const[saving,setSaving]=useState(false);const[saved,setSaved]=useState(false);
   const keys=['variance_threshold','company_name','hr_manager_name','general_manager_name','ot_multiplier'];
   const siKeys=['si_min','si_max','pers_ex'];
-  const attKeys=['shift_start','shift_end','grace_minutes'];
-  const labels={variance_threshold:'Variance Alert Threshold (%)',company_name:'Company Name',hr_manager_name:'HR Manager Name (Payslip Signature)',general_manager_name:'General Manager Name (Payslip Signature)',ot_multiplier:'OT Rate Multiplier (default 1.35×)',si_min:'Social Insurance Min. Wage (EGP/month)',si_max:'Social Insurance Max. Wage (EGP/month)',pers_ex:'Annual Personal Tax Exemption (EGP)',shift_start:'Shift Start Time',shift_end:'Shift End Time',grace_minutes:'Grace Period (minutes)'};
-  const defs={variance_threshold:'15',company_name:'Eterna Developments',hr_manager_name:'م. محمد عبدالباقي',general_manager_name:'المدير العام',ot_multiplier:'1.35',si_min:String(SI_DEFAULTS.si_min),si_max:String(SI_DEFAULTS.si_max),pers_ex:String(SI_DEFAULTS.pers_ex),shift_start:'09:00',shift_end:'17:00',grace_minutes:'15'};
+  const attKeys=['shift_start','shift_end','grace_minutes','weekend_days'];
+  const WEEKDAY_LABELS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const labels={variance_threshold:'Variance Alert Threshold (%)',company_name:'Company Name',hr_manager_name:'HR Manager Name (Payslip Signature)',general_manager_name:'General Manager Name (Payslip Signature)',ot_multiplier:'OT Rate Multiplier (default 1.35×)',si_min:'Social Insurance Min. Wage (EGP/month)',si_max:'Social Insurance Max. Wage (EGP/month)',pers_ex:'Annual Personal Tax Exemption (EGP)',shift_start:'Shift Start Time',shift_end:'Shift End Time',grace_minutes:'Grace Period (minutes)',weekend_days:'Weekly Off Days'};
+  const defs={variance_threshold:'15',company_name:'Eterna Developments',hr_manager_name:'م. محمد عبدالباقي',general_manager_name:'المدير العام',ot_multiplier:'1.35',si_min:String(SI_DEFAULTS.si_min),si_max:String(SI_DEFAULTS.si_max),pers_ex:String(SI_DEFAULTS.pers_ex),shift_start:'09:00',shift_end:'17:00',grace_minutes:'15',weekend_days:'5,6'};
   const allKeys=[...keys,...siKeys,...attKeys];
   useEffect(()=>{(async()=>{setLoading(true);const{data}=await sb.from('settings').select('*');const m={...defs};(data||[]).forEach(s=>m[s.key]=s.value);setS(m);applyPayrollSettings(m);setLoading(false);})();},[]);
   const save=async()=>{
@@ -3499,6 +3510,23 @@ function SettingsTab(){
       <div className="form-group" style={{marginBottom:12}}><label>{labels.shift_start}</label><input type="time" value={settings.shift_start??''} onChange={e=>setS(p=>({...p,shift_start:e.target.value}))}/></div>
       <div className="form-group" style={{marginBottom:12}}><label>{labels.shift_end}</label><input type="time" value={settings.shift_end??''} onChange={e=>setS(p=>({...p,shift_end:e.target.value}))}/></div>
       <div className="form-group" style={{marginBottom:12}}><label>{labels.grace_minutes}</label><input type="number" min="0" value={settings.grace_minutes??''} onChange={e=>setS(p=>({...p,grace_minutes:e.target.value}))}/></div>
+      <div className="form-group" style={{marginBottom:12}}>
+        <label>{labels.weekend_days}</label>
+        <div style={{display:'flex',gap:10,flexWrap:'wrap',marginTop:4}}>
+          {WEEKDAY_LABELS.map((lbl,idx)=>{
+            const set=new Set(String(settings.weekend_days??defs.weekend_days).split(',').filter(Boolean).map(Number));
+            const checked=set.has(idx);
+            return <label key={idx} style={{display:'flex',alignItems:'center',gap:4,fontSize:12,cursor:'pointer'}}>
+              <input type="checkbox" style={{width:'auto'}} checked={checked} onChange={e=>{
+                const s=new Set(set);
+                if(e.target.checked) s.add(idx); else s.delete(idx);
+                setS(p=>({...p,weekend_days:[...s].sort().join(',')}));
+              }}/> {lbl}
+            </label>;
+          })}
+        </div>
+        <div style={{fontSize:11,color:'var(--ink-light)',marginTop:4}}>Days with no attendance record are only flagged absent if they're not a weekly off day.</div>
+      </div>
     </div>
   </div><div className="alert alert-info" style={{marginTop:20,maxWidth:520}}>Settings apply on next payroll calculation. Changes don't affect finalized runs.</div></div></div>);
 }
