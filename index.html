@@ -2055,13 +2055,11 @@ function AttendanceImportModal({ employees, settings, onClose, onImported }) {
           if(parsed.format==='raw_log'){
             checkIn=parseTimeFlexible(r[parsed.colMap.check_in]);
             checkOut=parsed.colMap.check_out?parseTimeFlexible(r[parsed.colMap.check_out]):null;
-            if(parsed.colMap.late_in){
-              lateMinutes=hmToMinutes(r[parsed.colMap.late_in]);
-              status=checkIn?(lateMinutes>0?'late':'present'):'absent';
-            } else {
-              const la=computeLateAndStatus(checkIn,shiftStart,grace);
-              lateMinutes=la.lateMinutes;status=la.status;
-            }
+            // Always compute lateness from Check-In vs. the configured shift, rather than
+            // trusting the file's own Late-In column -- that column has proven unreliable
+            // (e.g. reading 0 for a clearly-late check-in) against real exports.
+            const la=computeLateAndStatus(checkIn,shiftStart,grace);
+            lateMinutes=la.lateMinutes;status=la.status;
             otMinutes=computeOtMinutes(checkOut,shiftEnd);
             if(!checkIn&&lateMinutes===0&&date){
               const dow=new Date(date+'T00:00:00').getDay();
